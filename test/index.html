@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Fancy Template</title>
+        <script src="../bower_components/jquery/dist/jquery.min.js"></script>
+        <script src="../bower_components/fancy/fancy.min.js"></script>
+        <script src="../bower_components/fancy.switch/fancyswitch.js"></script>
+        <link href="../bower_components/fancy.switch/fancyswitch.min.css" rel="stylesheet" type="text/css">
+        <script src="../fancytemplate.js"></script>
+
+        <script>
+            var scope = { test: "Hallo" };
+            var ft;
+            $( function() {
+                ft         = new Fancy( "body" ).template( { scope: scope } ).compile();
+                scope.test = "Nein";
+                ft.update();
+
+
+                var list = [ {
+                    name: "Test 1",
+                    id  : "test-1"
+                }, {
+                    name: "Test 2",
+                    id  : "test-2"
+                } ];
+
+                Fancy( "#list" ).switch( {
+                    template: '<div class="FancySwitch-item">{{ $index }} {{name}}<div class="FancySwitch-up">$upText$</div><div class="FancySwitch-down">$downText$</div></div>'
+                }, list );
+
+            } );
+        </script>
+    </head>
+    <body>
+        {{ test }}
+
+
+        <div id="list"></div>
+
+    </body>
+
+</html>
