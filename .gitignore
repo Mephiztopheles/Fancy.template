@@ -3,6 +3,7 @@
 
 # IntelliJ project files
 .idea
+bower_components
 *.iml
 out
 gen
