@@ -32,7 +32,6 @@
         var SELF = this;
         if( scope )
             SELF.settings.scope = scope;
-        console.log( this.settings.scope );
         $( SELF.parsed ).each( function() {
             $( this ).html( SELF.settings.scope[ $( this ).data( "$value" ) ] );
         } );
@@ -43,7 +42,6 @@
             tpl  = $( this.template );
 
         function parseTemplate( it ) {
-            console.log( it.text().trim() );
             it.data( "$value", it.text().trim() );
             it.html( it.html().replace( it.text().trim(), SELF.settings.scope[ it.data( "$value" ) ] ) );
             return it;
