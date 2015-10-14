@@ -46,8 +46,6 @@
             it.html( it.html().replace( it.text().trim(), SELF.settings.scope[ it.data( "$value" ) ] ) );
             return it;
         }
-
-        console.log( SELF.settings.scope );
         tpl.filter( "." + SELF.settings.bindClass ).each( function() {
             SELF.parsed.push( parseTemplate( $( this ) ) );
         } );
