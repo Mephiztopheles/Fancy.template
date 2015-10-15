@@ -2,7 +2,7 @@
   "name": "fancy-template",
   "title": "Fancy-Template",
   "description": "JavaScript Template-Plugin for Fancy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "fancytemplate.min.js",
   "homepage": "http://mephiztopheles.wtf/fancy.template",
   "author": {

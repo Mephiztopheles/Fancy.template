@@ -6,7 +6,7 @@
     } );
     var id            = 0,
         NAME          = "FancyTemplate",
-        VERSION       = "0.0.1",
+        VERSION       = "0.0.2",
         templateCache = {},
         logged        = false;
 
@@ -46,7 +46,8 @@
             it.html( it.html().replace( it.text().trim(), SELF.settings.scope[ it.data( "$value" ) ] ) );
             return it;
         }
-        tpl.filter( "." + SELF.settings.bindClass ).each( function() {
+
+        tpl.filter( "." + SELF.settings.bindClass ).add( tpl.find( "." + SELF.settings.bindClass ) ).each( function() {
             SELF.parsed.push( parseTemplate( $( this ) ) );
         } );
         return tpl;
