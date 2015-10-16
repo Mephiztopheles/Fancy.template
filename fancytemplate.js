@@ -18,12 +18,11 @@
     }
 
     function $eval( scope, expression ) {
-        var mask = scope;
+        var mask = {};
         for( var p in this ) {
-            if( !(p in scope) ) {
-                mask[ p ] = undefined;
-            }
+            mask[ p ] = undefined;
         }
+        $.extend( mask, scope );
         mask.Date = Date;
         if( expression.match( /=[^= ]+/ ) || expression.match( /\s*var / ) ) {
             console.error( "you are not allowed to create variables here: " + expression );
