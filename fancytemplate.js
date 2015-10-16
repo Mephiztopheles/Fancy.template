@@ -20,7 +20,9 @@
     function $eval( scope, expression ) {
         var mask = scope;
         for( var p in this ) {
-            mask[ p ] = undefined;
+            if( !(p in scope) ) {
+                mask[ p ] = undefined;
+            }
         }
         mask.Date = Date;
         if( expression.match( /=[^= ]+/ ) || expression.match( /\s*var / ) ) {

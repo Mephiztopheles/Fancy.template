@@ -8,10 +8,7 @@
         <script src="../fancytemplate.js"></script>
 
         <script>
-            var arg1 = { a: 12 };
             var scope = { test: "Hallo", date: new Date(), num: 10 };
-            var ft;
-
             Fancy.templateFilter( "date", function( value ) {
                 return value.toLocaleString();
             } );
@@ -20,7 +17,7 @@
             } );
             Fancy.allowTemplateTags( "u" );
             $( function() {
-                ft = new Fancy( "body" ).template( { scope: scope } ).compile();
+                new Fancy( "body" ).template( { scope: scope } ).compile();
             } );
         </script>
     </head>
