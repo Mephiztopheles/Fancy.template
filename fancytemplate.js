@@ -16,10 +16,11 @@
         for( var p in this ) {
             mask[ p ] = undefined;
         }
+        mask.Date = Date;
         if( expression.match( /=[^= ]+/ ) ) {
             throw new Error( "you are not allowed to create variables here: " + expression )
         }
-        return (new Function( "try{with(this){ return " + expression + " }}catch(e){console.log(e)}" )).call( mask );
+        return (new Function( "with(this){ try{return " + expression + "; }catch(e){console.log(e)}}" )).call( mask );
     }
 
     function parseTemplate( scope, it, expression ) {
