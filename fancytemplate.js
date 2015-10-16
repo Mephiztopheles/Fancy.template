@@ -12,10 +12,14 @@
         logged        = false;
 
     function $eval( scope, expression ) {
+        var mask = scope;
+        for( var p in this ) {
+            mask[ p ] = undefined;
+        }
         if( expression.match( /=[^= ]+/ ) ) {
             throw new Error( "you are not allowed to create variables here: " + expression )
         }
-        return (new Function( "try{with(this){ return " + expression + " }}catch(e){console.log(e)}" )).call( scope );
+        return (new Function( "try{with(this){ return " + expression + " }}catch(e){console.log(e)}" )).call( mask );
     }
 
     function parseTemplate( scope, it, expression ) {
