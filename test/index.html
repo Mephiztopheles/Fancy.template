@@ -4,38 +4,32 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
-        <script src="../bower_components/fancy/fancy.min.js"></script>
-        <script src="../bower_components/fancy.switch/fancyswitch.js"></script>
-        <link href="../bower_components/fancy.switch/fancyswitch.min.css" rel="stylesheet" type="text/css">
+        <script src="../bower_components/fancy/fancy.js"></script>
         <script src="../fancytemplate.js"></script>
 
         <script>
-            var scope = { test: "Hallo" };
+            var arg1 = { a: 12 };
+            var scope = { test: "Hallo", date: new Date(), o: { a: null } };
             var ft;
-            $( function() {
+
+            Fancy.templateFilter( "date", function ( value ) {
+                console.log( arguments );
+                return value.toLocaleString();
+            } );
+
+            $( function () {
                 ft         = new Fancy( "body" ).template( { scope: scope } ).compile();
                 scope.test = "Nein";
                 ft.update();
-
-
-                var list = [ {
-                    name: "Test 1",
-                    id  : "test-1"
-                }, {
-                    name: "Test 2",
-                    id  : "test-2"
-                } ];
-
-                Fancy( "#list" ).switch( {
-                    template: '<div class="FancySwitch-item">{{ $index }} {{name}}<div class="FancySwitch-up">$upText$</div><div class="FancySwitch-down">$downText$</div></div>'
-                }, list );
-
             } );
         </script>
     </head>
     <body>
         {{ test }}
-
+        {{ date|date:1+2:12 }}
+        {{ o.a }}
+        {{ 3 - 1 }}
+        {{ "testings" }}
 
         <div id="list"></div>
 
