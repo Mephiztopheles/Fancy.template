@@ -9,15 +9,15 @@
 
         <script>
             var arg1 = { a: 12 };
-            var scope = { test: "Hallo", date: new Date(), o: { a: null } };
+            var scope = { test: "Hallo", date: new Date(), num: 10 };
             var ft;
 
-            Fancy.templateFilter( "date", function ( value ) {
+            Fancy.templateFilter( "date", function( value ) {
                 console.log( arguments );
                 return value.toLocaleString();
             } );
 
-            $( function () {
+            $( function() {
                 ft         = new Fancy( "body" ).template( { scope: scope } ).compile();
                 scope.test = "Nein";
                 ft.update();
@@ -25,12 +25,8 @@
         </script>
     </head>
     <body>
-        {{ test }}
-        {{ date|date:1+2:12 }}
-        {{ o.a }}
-        {{ 3 - 1 }}
-        {{ "testings" }}
-
+        <span>{{ test }}</span><br>{{ date|date:1+2:12 }}<br>{{ o.a }}<br>{{ 3 - 1 }}<br>{{ num + 10 }}<br>{{ "testings" }}<br>
+        {{ (fdsfds == 12121).toString() }}
         <div id="list"></div>
 
     </body>
