@@ -9,7 +9,13 @@
         VERSION       = "0.0.3",
         templateCache = {},
         FILTER        = {},
+        SINGLETAGS    = [ "br", "link", "img", "meta", "param", "input", "source", "track" ],
+        STRIPTAGS     = [ "b", "i", "u" ],
         logged        = false;
+
+    function $A( args ) {
+        return Array.prototype.slice.call( args );
+    }
 
     function $eval( scope, expression ) {
         var mask = scope;
@@ -17,10 +23,11 @@
             mask[ p ] = undefined;
         }
         mask.Date = Date;
-        if( expression.match( /=[^= ]+/ ) ) {
-            throw new Error( "you are not allowed to create variables here: " + expression )
+        if( expression.match( /=[^= ]+/ ) || expression.match( /\s*var / ) ) {
+            console.error( "you are not allowed to create variables here: " + expression );
+            return undefined;
         }
-        return (new Function( "with(this){ try{return " + expression + "; }catch(e){console.log(e)}}" )).call( mask );
+        return (new Function( "with(this){ try{ return " + expression + "; } catch(e){} }" )).call( mask );
     }
 
     function parseTemplate( scope, it, expression ) {
@@ -80,7 +87,6 @@
         } else {
             evaluated = $eval( scope, expression );
         }
-        console.log( expression, evaluated );
         if( Fancy.getType( evaluated ) === "null" || Fancy.getType( evaluated ) === "undefined" ) {
             return "";
         }
@@ -108,13 +114,13 @@
             allBut = "[^" + l[ 0 ] + r[ r.length - 1 ] + "]*";
 
         function compile() {
-            SELF.template = SELF.template.replace( new RegExp( "<([^>br]*)>(\\s*)" + l + "(" + allBut + ")" + r + "(\\s*)<", "gm" ), function( match, el, before, exp, after ) {
+            SELF.template = SELF.template.replace( new RegExp( "<((?!.*(?:" + STRIPTAGS.concat( SINGLETAGS ).join( "|" ) + ")).*)>(\\s*)" + l + "(" + allBut + ")" + r + "(\\s*)<", "gm" ), function( match, el, before, exp, after ) {
                 if( el.indexOf( "script" ) === 0 ) {
                     return;
                 }
                 var tag;
-                if( el.match( /class=["|']/ ) ) {
-                    tag = el.replace( /class=["']([^"]*)["']/, function( match, $1 ) {
+                if( el.match( /class="/ ) ) {
+                    tag = el.replace( /class="([^"]*)"/, function( match, $1 ) {
                         return "class=\"" + $1 + " " + SELF.settings.bindClass + "\"";
                     } );
                 } else {
@@ -125,7 +131,6 @@
             SELF.template = SELF.template.replace( new RegExp( l + "(" + allBut + ")" + r, "g" ), function( match, $1 ) {
                 return '<span class="' + SELF.settings.bindClass + '">' + $1.trim() + '</span>';
             } );
-
             SELF.element.html( SELF.parse() );
         }
 
@@ -141,13 +146,36 @@
         scope         : {},
         leftDelimiter : "{{",
         rightDelimiter: "}}",
-        bindClass     : NAME + "-bindings"
+        bindClass     : NAME + "-bindings",
+        ignoreTags    : []
     };
 
-    Fancy.templateFilter = function( name, filter ) {
+    Fancy.templateFilter     = function( name, filter ) {
         FILTER[ name ] = filter;
     };
-    Fancy.loadTemplate   = function( url ) {
+    Fancy.forbidTemplateTags = function() {
+        $A( arguments ).forEach( function( it ) {
+            var index       = STRIPTAGS.indexOf( it ),
+                singleIndex = SINGLETAGS.indexOf( it );
+            if( index === -1 && singleIndex === -1 ) {
+                STRIPTAGS.push( it );
+            } else if( singleIndex !== -1 ) {
+                console.error( "singletags are forbidden by default" );
+            }
+        } )
+    };
+    Fancy.allowTemplateTags  = function() {
+        $A( arguments ).forEach( function( it ) {
+            var index       = STRIPTAGS.indexOf( it ),
+                singleIndex = SINGLETAGS.indexOf( it );
+            if( index !== -1 && singleIndex === -1 ) {
+                STRIPTAGS.splice( index, 1 );
+            } else if( singleIndex !== -1 ) {
+                console.error( "You cannot allow singletags" );
+            }
+        } )
+    };
+    Fancy.loadTemplate       = function( url ) {
         var success = function() {},
             error   = function() {};
         if( templateCache[ url ] ) {
@@ -178,8 +206,8 @@
             error   = not;
         };
     };
-    Fancy.template       = VERSION;
-    Fancy.api.template   = function( settings ) {
+    Fancy.template           = VERSION;
+    Fancy.api.template       = function( settings ) {
         return this.set( NAME, function( el ) {
             return new FancyTemplate( el, settings );
         }, false );

@@ -16,22 +16,22 @@
                 console.log( arguments );
                 return value.toLocaleString();
             } );
-
+            Fancy.allowTemplateTags( "u" );
             $( function() {
                 ft = new Fancy( "body" ).template( { scope: scope } ).compile();
             } );
         </script>
     </head>
     <body>
-        <span>{{ test }}</span>
+        <small>{{ test }}</small>
         <br>{{ date|date:1+2:12 }}
         <br>{{ o.a }}
         <br>{{ 3 - 1 }}
         <br>{{ num + 10 }}
         <br>{{ "testings" }}
-        <br>{{ (fdsfds == 12121).toString() }}
+        <br>{{ true }}
+        <br>{{ var test = "lol"}}
         <div id="list"></div>
-
     </body>
 
 </html>
