@@ -6,7 +6,7 @@
     } );
     var id            = 0,
         NAME          = "FancyTemplate",
-        VERSION       = "0.0.2",
+        VERSION       = "0.0.3",
         templateCache = {},
         FILTER        = {},
         logged        = false;
