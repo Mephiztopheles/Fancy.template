@@ -13,8 +13,10 @@
             var ft;
 
             Fancy.templateFilter( "date", function( value ) {
-                console.log( arguments );
                 return value.toLocaleString();
+            } );
+            Fancy.templateFilter( "currency", function( value, symbol ) {
+                return value.toFixed( 2 ) + " " + symbol;
             } );
             Fancy.allowTemplateTags( "u" );
             $( function() {
@@ -24,13 +26,16 @@
     </head>
     <body>
         <small>{{ test }}</small>
-        <br>{{ date|date:1+2:12 }}
+        <br>{{ date|date }}
         <br>{{ o.a }}
         <br>{{ 3 - 1 }}
         <br>{{ num + 10 }}
         <br>{{ "testings" }}
         <br>{{ true }}
-        <br>{{ var test = "lol"}}
+        <br>{{ num === 10 }}
+        <br>{{ var test = "lol" }}
+        <br>{{ new Date()|date }}
+        <br>{{ 121212|currency:"€" }}
         <div id="list"></div>
     </body>
 

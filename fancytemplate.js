@@ -82,8 +82,8 @@
         };
         evaluated = null;
         // only properties
-        if( expression.match( new RegExp( "^" + regexps.properties + "\\|(\\w)*" ) ) ) {
-            evaluated = FancyTemplate.filter( scope, expression.match( /\|(\w*)/ )[ 1 ], Fancy.getKey( scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
+        if( expression.match( new RegExp( "\\S+\\|(\\w)*" ) ) ) {
+            evaluated = FancyTemplate.filter( scope, expression.match( /\|(\w*)/ )[ 1 ], $eval( scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
         } else {
             evaluated = $eval( scope, expression );
         }
@@ -94,6 +94,10 @@
     };
 
     FancyTemplate.filter = function( scope, name, value, filter ) {
+        if( !FILTER[ name ] ) {
+            console.error( "You didn't define " + (name || "the filter") );
+            return value;
+        }
         var args    = [ value ];
         var filters = filter.replace( name, "" ).split( ":" );
         filters.splice( 0, 1 );
@@ -146,12 +150,15 @@
         scope         : {},
         leftDelimiter : "{{",
         rightDelimiter: "}}",
-        bindClass     : NAME + "-bindings",
-        ignoreTags    : []
+        bindClass     : NAME + "-bindings"
     };
 
     Fancy.templateFilter     = function( name, filter ) {
-        FILTER[ name ] = filter;
+        if( Fancy.getType( filter ) === "function" ) {
+            FILTER[ name ] = filter;
+        } else {
+            console.error( "You can define " + (name || "a filter") + " only as function!" );
+        }
     };
     Fancy.forbidTemplateTags = function() {
         $A( arguments ).forEach( function( it ) {
@@ -210,7 +217,7 @@
     Fancy.api.template       = function( settings ) {
         return this.set( NAME, function( el ) {
             return new FancyTemplate( el, settings );
-        }, false );
+        }, true );
     };
 
 })( jQuery );
