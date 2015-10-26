@@ -8,7 +8,7 @@
         <script src="../fancytemplate.js"></script>
 
         <script>
-            var scope = { test: "Hallo", date: new Date(), num: 10 };
+            var scope = { user: "Markus", date: new Date(), num: 10 };
             Fancy.templateFilter( "date", function( value ) {
                 return value.toLocaleString();
             } );
@@ -18,11 +18,21 @@
             Fancy.allowTemplateTags( "u" );
             $( function() {
                 new Fancy( "body" ).template( { scope: scope } ).compile();
+
+                setTimeout( function() {
+                    scope.test = "Hallo User";
+                    new Fancy( "body" ).template().update();
+                }, 3000 );
             } );
         </script>
     </head>
     <body>
-        <small>{{ test }}</small>
+        <small>{{ "Hallo " + user }}</small>
+        <div>
+            <span>
+                <u>{{ "Test" }} {{ test = "lol" }} {{ test }}</u>
+            </span>
+        </div>
         <br>{{ date|date }}
         <br>{{ o.a }}
         <br>{{ 3 - 1 }}
@@ -30,7 +40,6 @@
         <br>{{ "testings" }}
         <br>{{ true }}
         <br>{{ num === 10 }}
-        <br>{{ var test = "lol" }}
         <br>{{ new Date()|date }}
         <br>{{ 121212|currency:"€" }}
         <div id="list"></div>

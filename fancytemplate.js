@@ -24,16 +24,15 @@
         }
         $.extend( mask, scope );
         mask.Date = Date;
-        if( expression.match( /=[^= ]+/ ) || expression.match( /\s*var / ) ) {
+        if( expression.match( /=[^= ]+/ ) || expression.match( /\s*var / ) || expression.match( /[^=]=[^=]/ ) ) {
             console.error( "you are not allowed to create variables here: " + expression );
             return undefined;
         }
-        return (new Function( "with(this){ try{ return " + expression + "; } catch(e){} }" )).call( mask );
+        return (new Function( "with(this){ try{ return " + expression + "; \r\n } catch(e){return '';} }" )).call( mask );
     }
 
-    function parseTemplate( scope, it, expression ) {
-        it.html( FancyTemplate.eval( scope, expression ) );
-        return it;
+    function getExpression( l, r ) {
+        return new RegExp( "(?:" + l + ")([^" + l + r + "]*)(?:" + r + ")", "g" );
     }
 
     function FancyTemplate( $el, settings ) {
@@ -59,29 +58,25 @@
         if( scope ) {
             SELF.settings.scope = scope;
         }
-        SELF.parsed.forEach( function( it ) {
-            parseTemplate( SELF.settings.scope, it.html, it.expression );
-        } );
+        this.parse();
         return this;
     };
 
     FancyTemplate.api.parse = function() {
         var SELF = this,
-            tpl  = $( this.template );
-        tpl.filter( "." + SELF.settings.bindClass ).add( tpl.find( "." + SELF.settings.bindClass ) ).each( function() {
-            var it         = $( this ),
-                expression = it.text().trim();
-            SELF.parsed.push( { expression: expression, html: parseTemplate( SELF.settings.scope, it, expression ) } );
+            l    = this.settings.leftDelimiter,
+            r    = this.settings.rightDelimiter;
+        this.parsed.forEach( function( it ) {
+            var expressions   = getExpression( l, r );
+            it.node.nodeValue = it.expression.replace( expressions, function( match, $1 ) {
+                return FancyTemplate.eval( SELF.settings.scope, $1 );
+            } )
         } );
-        return tpl;
+        return this;
     };
 
     FancyTemplate.eval = function( scope, expression ) {
-        var regexps, evaluated;
-        regexps   = {
-            properties: "(\\w+\\.?\\w*)+"
-        };
-        evaluated = null;
+        var evaluated = null;
         // only properties
         if( expression.match( new RegExp( "\\S+\\|(\\w)*" ) ) ) {
             evaluated = FancyTemplate.filter( scope, expression.match( /\|(\w*)/ )[ 1 ], $eval( scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
@@ -113,38 +108,33 @@
     };
 
     FancyTemplate.api.compile = function() {
-        var SELF   = this,
-            l      = this.settings.leftDelimiter,
-            r      = this.settings.rightDelimiter,
-            allBut = "[^" + l[ 0 ] + r[ r.length - 1 ] + "]*";
+        var SELF = this;
 
-        function compile() {
-            SELF.template = SELF.template.replace( new RegExp( "<((?!.*(?:" + STRIPTAGS.concat( SINGLETAGS ).join( "|" ) + ")).*)>(\\s*)" + l + "(" + allBut + ")" + r + "(\\s*)<", "gm" ), function( match, el, before, exp, after ) {
-                if( el.indexOf( "script" ) === 0 ) {
-                    return;
+        function getTextNodesIn( node, includeWhitespaceNodes ) {
+            var textNodes = [], nonWhitespaceMatcher = /\S/;
+
+            function getTextNodes( node ) {
+                if( node.nodeType == 3 ) {
+                    if( includeWhitespaceNodes || nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                        textNodes.push( node );
+                    }
+                } else if( node.childNodes ) {
+                    for( var i = 0, len = node.childNodes.length; i < len; ++i ) {
+                        getTextNodes( node.childNodes[ i ] );
+                    }
                 }
-                var tag;
-                if( el.match( /class="/ ) ) {
-                    tag = el.replace( /class="([^"]*)"/, function( match, $1 ) {
-                        return "class=\"" + $1 + " " + SELF.settings.bindClass + "\"";
-                    } );
-                } else {
-                    tag = el + " class=\"" + SELF.settings.bindClass + "\"";
-                }
-                return '<' + tag + '>' + before + exp + after + '<';
-            } );
-            SELF.template = SELF.template.replace( new RegExp( l + "(" + allBut + ")" + r, "g" ), function( match, $1 ) {
-                return '<span class="' + SELF.settings.bindClass + '">' + $1.trim() + '</span>';
-            } );
-            SELF.element.html( SELF.parse() );
+            }
+
+            getTextNodes( node );
+            return textNodes;
         }
 
-        if( this.template ) {
-            compile();
-        } else {
-            setTimeout( compile, 40 );
-        }
-        return this;
+        var nodes = getTextNodesIn( this.element[ 0 ] );
+        nodes.forEach( function( it ) {
+            SELF.parsed.push( { expression: it.nodeValue, node: it } );
+        } );
+
+        return this.parse();
     };
 
     Fancy.settings [ NAME ] = {
