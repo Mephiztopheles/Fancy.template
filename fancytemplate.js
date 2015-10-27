@@ -11,10 +11,18 @@
         FILTER        = {},
         SINGLETAGS    = [ "br", "link", "img", "meta", "param", "input", "source", "track" ],
         STRIPTAGS     = [ "b", "i", "u" ],
+        NODETYPE      = {
+            comment: 8,
+            text   : 3
+        },
         logged        = false;
 
     function $A( args ) {
         return Array.prototype.slice.call( args );
+    }
+
+    function escapeRegExp( str ) {
+        return str.replace( /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&" );
     }
 
     function $eval( scope, expression ) {
@@ -32,13 +40,14 @@
     }
 
     function getExpression( l, r ) {
-        return new RegExp( "(?:" + l + ")([^" + l + r + "]*)(?:" + r + ")", "g" );
+        var L = escapeRegExp( l ),
+            R = escapeRegExp( r );
+        return new RegExp( "(?:" + L + ")([^" + L + R + "]*)(?:" + R + ")", "g" );
     }
 
     function FancyTemplate( $el, settings ) {
         var SELF      = this;
         this.element  = $el;
-        this.template = $el.html();
         this.settings = $.extend( {}, Fancy.settings [ NAME ], settings );
         this.id       = id++;
         this.parsed   = [];
@@ -46,6 +55,9 @@
             logged = true;
             Fancy.version( SELF );
         }
+        this.element.on( "DOMNodeInserted." + NAME, function() {
+            SELF.compile();
+        } );
 
         return this;
     }
@@ -66,11 +78,16 @@
         var SELF = this,
             l    = this.settings.leftDelimiter,
             r    = this.settings.rightDelimiter;
-        this.parsed.forEach( function( it ) {
+        this.parsed.forEach( function( it, i ) {
             var expressions   = getExpression( l, r );
             it.node.nodeValue = it.expression.replace( expressions, function( match, $1 ) {
                 return FancyTemplate.eval( SELF.settings.scope, $1 );
-            } )
+            } );
+            if( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
+                var newNode           = $( document.createTextNode( it.node.nodeValue ) );
+                $( it.node ).replaceWith( newNode );
+                SELF.parsed[ i ].node = newNode[ 0 ];
+            }
         } );
         return this;
     };
@@ -108,14 +125,15 @@
     };
 
     FancyTemplate.api.compile = function() {
-        var SELF = this;
+        var SELF = this,
+            nodes;
 
-        function getTextNodesIn( node, includeWhitespaceNodes ) {
+        function getTextNodesIn( node ) {
             var textNodes = [], nonWhitespaceMatcher = /\S/;
 
             function getTextNodes( node ) {
-                if( node.nodeType == 3 ) {
-                    if( includeWhitespaceNodes || nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                if( node.nodeType == NODETYPE.text ) {
+                    if( nonWhitespaceMatcher.test( node.nodeValue ) ) {
                         textNodes.push( node );
                     }
                 } else if( node.childNodes ) {
@@ -125,16 +143,64 @@
                 }
             }
 
+
             getTextNodes( node );
             return textNodes;
         }
 
-        var nodes = getTextNodesIn( this.element[ 0 ] );
-        nodes.forEach( function( it ) {
-            SELF.parsed.push( { expression: it.nodeValue, node: it } );
-        } );
+        function getCommentNodesIn( node ) {
+            var commentNodes = [], nonWhitespaceMatcher = /\S/;
+
+            function getCommentNodes( node ) {
+                if( node.nodeType === NODETYPE.comment ) {
+                    if( nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                        commentNodes.push( node );
+                    }
+                } else if( node.childNodes ) {
+                    for( var i = 0, len = node.childNodes.length; i < len; ++i ) {
+                        getCommentNodes( node.childNodes[ i ] );
+                    }
+                }
+            }
+
+            getCommentNodes( node );
+            return commentNodes;
+        }
+
+        if( ~SELF.settings.leftDelimiter.indexOf( "<!" ) ) {
+            nodes                        = getCommentNodesIn( this.element[ 0 ] );
+            SELF.settings.leftDelimiter  = "<!--";
+            SELF.settings.rightDelimiter = ">";
+            nodes.forEach( function( it ) {
+                var nodeValue = "<!--" + it.nodeValue + ">";
+                if( nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
+                    SELF.parsed.push( { expression: nodeValue, node: it, nodeType: it.nodeType } );
+                }
+            } );
+        } else {
+            nodes = getTextNodesIn( this.element[ 0 ] );
+            nodes.forEach( function( it ) {
+                if( it.nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
+                    SELF.parsed.push( { expression: it.nodeValue, node: it, nodeType: it.nodeType } );
+                }
+            } );
+        }
 
         return this.parse();
+    };
+
+    FancyTemplate.api.destroy = function() {
+        this.element.off( "DOMNodeInserted." + NAME );
+        this.parsed.forEach( function( it ) {
+            if( it.nodeType === NODETYPE.comment ) {
+                var newNode = $( document.createComment( it.expression.replace( "<!--", "" ).replace( ">", "" ) ) );
+                $( it.node ).replaceWith( newNode );
+            } else {
+                it.node.nodeValue = it.expression;
+            }
+        } );
+        this.element.removeData( NAME );
+        return null;
     };
 
     Fancy.settings [ NAME ] = {
@@ -211,4 +277,5 @@
         }, true );
     };
 
-})( jQuery );
+})
+( jQuery );

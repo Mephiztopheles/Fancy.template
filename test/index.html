@@ -8,7 +8,11 @@
         <script src="../fancytemplate.js"></script>
 
         <script>
-            var scope = { user: "Markus", date: new Date(), num: 10 };
+            var scope = {
+                user: "Markus", date: new Date(), num: 10, getValue: function() {
+                    return "This is my value";
+                }
+            };
             Fancy.templateFilter( "date", function( value ) {
                 return value.toLocaleString();
             } );
@@ -42,6 +46,8 @@
         <br>{{ num === 10 }}
         <br>{{ new Date()|date }}
         <br>{{ 121212|currency:"€" }}
+        <br>{{ getValue() }}
+            <!-- 'hallo' -->
         <div id="list"></div>
     </body>
 
