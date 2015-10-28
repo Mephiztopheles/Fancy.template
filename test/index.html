@@ -9,21 +9,22 @@
 
         <script>
             var scope = {
-                user: "Markus", date: new Date(), num: 10, getValue: function() {
+                user: "Markus", date: new Date(), num: 10, getValue: function () {
                     return "This is my value";
-                }
+                },
+                "var": "test"
             };
-            Fancy.templateFilter( "date", function( value ) {
+            Fancy.templateFilter( "date", function ( value ) {
                 return value.toLocaleString();
             } );
-            Fancy.templateFilter( "currency", function( value, symbol ) {
+            Fancy.templateFilter( "currency", function ( value, symbol ) {
                 return value.toFixed( 2 ) + " " + symbol;
             } );
             Fancy.allowTemplateTags( "u" );
-            $( function() {
+            $( function () {
                 new Fancy( "body" ).template( { scope: scope } ).compile();
 
-                setTimeout( function() {
+                setTimeout( function () {
                     scope.test = "Hallo User";
                     new Fancy( "body" ).template().update();
                 }, 3000 );
@@ -34,7 +35,7 @@
         <small>{{ "Hallo " + user }}</small>
         <div>
             <span>
-                <u>{{ "Test" }} {{ test = "lol" }} {{ test }}</u>
+                <u>{{ "Test" }} {{ test }}</u>
             </span>
         </div>
         <br>{{ date|date }}
@@ -44,10 +45,11 @@
         <br>{{ "testings" }}
         <br>{{ true }}
         <br>{{ num === 10 }}
-        <br>{{ new Date()|date }}
+        <br>{{ var }}
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
-            <!-- 'hallo' -->
+        <br>{{ list }}
+        <!-- 'hallo' -->
         <div id="list"></div>
     </body>
 
