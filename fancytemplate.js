@@ -216,9 +216,7 @@
             }
         } );
 
-        if ( !error ) {
-            return (new Function( " try{ return " + expression + "; \r\n } catch(e){return '';}" )).call( scope );
-        }
+        return (new Function( " try{ return " + expression + "; \r\n } catch(e){return '';}" )).call( scope );
     }
 
     function parse( it, i, lexer ) {

@@ -9,7 +9,7 @@
 
         <script>
             var scope = {
-                user: "Markus", date: new Date(), num: 10, getValue: function () {
+                user : "Markus", date: new Date(), num: 10, getValue: function () {
                     return "This is my value";
                 },
                 "var": "test"
@@ -22,6 +22,7 @@
             } );
             Fancy.allowTemplateTags( "u" );
             $( function () {
+                new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ).compile();
                 new Fancy( "body" ).template( { scope: scope } ).compile();
 
                 setTimeout( function () {
@@ -49,7 +50,10 @@
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
         <br>{{ list }}
-        <!-- 'hallo' -->
+        <div id="test">
+            <!-- 'hallo' -->
+        </div>
+
         <div id="list"></div>
     </body>
 
