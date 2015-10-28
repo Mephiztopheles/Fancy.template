@@ -207,16 +207,12 @@
     function $eval( scope, expression ) {
 
         var lexer = new Lexer( expression );
-        var error = false;
         lexer.forEach( function ( it, i ) {
-            if ( !error ) {
-                if ( parse( it, i, lexer ) ) {
-                    throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
-                    return error = true;
-                }
-                if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                    expression = expression.replace( it[ 1 ], "this." + it[ 1 ] );
-                }
+            if ( parse( it, i, lexer ) ) {
+                throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
+            }
+            if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+                expression = expression.replace( it[ 1 ], "this." + it[ 1 ] );
             }
         } );
 
