@@ -4,30 +4,40 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
-        <script src="../bower_components/fancy/fancy.js"></script>
+        <script src="../bower_components/fancy/fancy.min.js"></script>
+        <script src="../bower_components/fancy-lexer/fancylexer.min.js"></script>
         <script src="../fancytemplate.js"></script>
 
         <script>
             var scope = {
-                user : "Markus", date: new Date(), num: 10, getValue: function () {
+                user : "Markus", date: new Date(), num: 10, getValue: function() {
                     return "This is my value";
                 },
                 "var": "test"
             };
-            Fancy.templateFilter( "date", function ( value ) {
-                return value.toLocaleString();
-            } );
-            Fancy.templateFilter( "currency", function ( value, symbol ) {
-                return value.toFixed( 2 ) + " " + symbol;
-            } );
+            var filter = {
+                "date"    : function( value ) {
+                    return value.toLocaleString();
+                },
+                "currency": function( value, symbol ) {
+                    return value.toFixed( 2 ) + " " + symbol;
+                }
+            };
             Fancy.allowTemplateTags( "u" );
-            $( function () {
-                new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ).compile();
-                new Fancy( "body" ).template( { scope: scope } ).compile();
+            $( function() {
+                var t = new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ),
+                    b = new Fancy( "body" ).template( { scope: scope } );
+                for( var i in filter ) {
+                    if( filter.hasOwnProperty( i ) ) {
+                        t.filter( i, filter[ i ] );
+                    }
+                }
+                t.compile();
+                b.compile();
 
-                setTimeout( function () {
+                setTimeout( function() {
                     scope.test = "Hallo User";
-                    new Fancy( "body" ).template().update();
+                    b.update();
                 }, 3000 );
             } );
         </script>
