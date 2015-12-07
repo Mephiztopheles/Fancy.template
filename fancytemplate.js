@@ -1,11 +1,11 @@
-(function( $ ) {
+(function ( $ ) {
     Fancy.require( {
         jQuery: false,
         Fancy : "1.1.0"
     } );
     var id            = 0,
         NAME          = "FancyTemplate",
-        VERSION       = "0.0.4",
+        VERSION       = "0.0.5",
         templateCache = {},
         SINGLETAGS    = [ "br", "link", "img", "meta", "param", "input", "source", "track" ],
         STRIPTAGS     = [ "b", "i", "u" ],
@@ -24,7 +24,7 @@
     }
 
     function isKeyword( string ) {
-        switch( string ) {
+        switch ( string ) {
             case "var":
             case "try":
             case "while":
@@ -60,11 +60,11 @@
     function $eval( scope, expression ) {
 
         var lexer = new Fancy.Lexer( expression );
-        lexer.forEach( function( it, i ) {
-            if( parse( it, i, lexer ) ) {
+        lexer.forEach( function ( it, i ) {
+            if ( parse( it, i, lexer ) ) {
                 throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
             }
-            if( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+            if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
                 expression = expression.replace( it[ 1 ], "this." + it[ 1 ] );
             }
         } );
@@ -103,11 +103,11 @@
         this.id       = id++;
         this.parsed   = [];
         this.$filter  = {};
-        if( !logged ) {
+        if ( !logged ) {
             logged = true;
             Fancy.version( SELF );
         }
-        this.element.on( "DOMNodeInserted." + NAME, function() {
+        this.element.on( "DOMNodeInserted." + NAME, function () {
             SELF.compile();
         } );
 
@@ -117,28 +117,28 @@
     FancyTemplate.api = FancyTemplate.prototype = {};
     FancyTemplate.api.version = VERSION;
     FancyTemplate.api.name    = NAME;
-    FancyTemplate.api.update  = function( scope ) {
+    FancyTemplate.api.update  = function ( scope ) {
         var SELF = this;
-        if( scope ) {
+        if ( scope ) {
             SELF.settings.scope = scope;
         }
         this.parse();
         return this;
     };
 
-    FancyTemplate.api.parse = function() {
+    FancyTemplate.api.parse = function () {
         var SELF = this,
             l    = this.settings.leftDelimiter,
             r    = this.settings.rightDelimiter;
-        this.parsed.forEach( function( it ) {
+        this.parsed.forEach( function ( it ) {
             var expressions = getExpression( l, r );
-            it.parsed       = it.expression.replace( expressions, function( match, $1 ) {
+            it.parsed       = it.expression.replace( expressions, function ( match, $1 ) {
                 return SELF.eval( $1 );
             } );
         } );
-        this.parsed.forEach( function( it, i ) {
+        this.parsed.forEach( function ( it, i ) {
             it.node.nodeValue = it.parsed;
-            if( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
+            if ( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
                 var newNode = $( document.createTextNode( it.parsed ) );
                 $( it.node ).replaceWith( newNode );
                 SELF.parsed[ i ].node = newNode[ 0 ];
@@ -147,13 +147,13 @@
         return this;
     };
 
-    FancyTemplate.api.eval = function( expression ) {
+    FancyTemplate.api.eval = function ( expression ) {
         var evaluated = null,
             SELF      = this;
         // only properties
-        if( expression.match( new RegExp( "\\S+\\|(\\w)*" ) ) ) {
-            evaluated = (function( scope, name, value, filter ) {
-                if( !SELF.$filter[ name ] ) {
+        if ( expression.match( new RegExp( "\\S+\\|(\\w)*" ) ) ) {
+            evaluated = (function ( scope, name, value, filter ) {
+                if ( !SELF.$filter[ name ] ) {
                     console.error( "You didn't define " + (name || "the filter") );
                     return value;
                 }
@@ -161,24 +161,24 @@
                 var filters = filter.replace( name, "" ).split( ":" );
                 filters.splice( 0, 1 );
                 try {
-                    filters.forEach( function( it ) {
+                    filters.forEach( function ( it ) {
                         args.push( $eval( scope, it ) );
                     } );
                     return SELF.$filter[ name ].apply( this, args );
-                } catch( e ) {
+                } catch ( e ) {
                     return value;
                 }
-            })( scope, expression.match( /\|(\w*)/ )[ 1 ], $eval( scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
+            })( SELF.settings.scope, expression.match( /\|(\w*)/ )[ 1 ], $eval( SELF.settings.scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
         } else {
-            evaluated = $eval( scope, expression );
+            evaluated = $eval( SELF.settings.scope, expression );
         }
-        if( Fancy.getType( evaluated ) === "null" || Fancy.getType( evaluated ) === "undefined" ) {
+        if ( Fancy.getType( evaluated ) === "null" || Fancy.getType( evaluated ) === "undefined" ) {
             return "";
         }
         return evaluated;
     };
 
-    FancyTemplate.api.compile = function() {
+    FancyTemplate.api.compile = function () {
         var SELF = this,
             nodes;
 
@@ -186,12 +186,12 @@
             var textNodes = [], nonWhitespaceMatcher = /\S/;
 
             function getTextNodes( node ) {
-                if( node.nodeType == NODETYPE.text ) {
-                    if( nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                if ( node.nodeType == NODETYPE.text ) {
+                    if ( nonWhitespaceMatcher.test( node.nodeValue ) ) {
                         textNodes.push( node );
                     }
-                } else if( node.childNodes ) {
-                    for( var i = 0, len = node.childNodes.length; i < len; ++i ) {
+                } else if ( node.childNodes ) {
+                    for ( var i = 0, len = node.childNodes.length; i < len; ++i ) {
                         getTextNodes( node.childNodes[ i ] );
                     }
                 }
@@ -206,12 +206,12 @@
             var commentNodes = [], nonWhitespaceMatcher = /\S/;
 
             function getCommentNodes( node ) {
-                if( node.nodeType === NODETYPE.comment ) {
-                    if( nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                if ( node.nodeType === NODETYPE.comment ) {
+                    if ( nonWhitespaceMatcher.test( node.nodeValue ) ) {
                         commentNodes.push( node );
                     }
-                } else if( node.childNodes ) {
-                    for( var i = 0, len = node.childNodes.length; i < len; ++i ) {
+                } else if ( node.childNodes ) {
+                    for ( var i = 0, len = node.childNodes.length; i < len; ++i ) {
                         getCommentNodes( node.childNodes[ i ] );
                     }
                 }
@@ -221,20 +221,20 @@
             return commentNodes;
         }
 
-        if( ~SELF.settings.leftDelimiter.indexOf( "<!" ) ) {
+        if ( ~SELF.settings.leftDelimiter.indexOf( "<!" ) ) {
             nodes                        = getCommentNodesIn( this.element[ 0 ] );
             SELF.settings.leftDelimiter  = "<!--";
             SELF.settings.rightDelimiter = ">";
-            nodes.forEach( function( it ) {
+            nodes.forEach( function ( it ) {
                 var nodeValue = "<!--" + it.nodeValue + ">";
-                if( nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
+                if ( nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
                     SELF.parsed.push( { expression: nodeValue, node: it, nodeType: it.nodeType } );
                 }
             } );
         } else {
             nodes = getTextNodesIn( this.element[ 0 ] );
-            nodes.forEach( function( it ) {
-                if( it.nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
+            nodes.forEach( function ( it ) {
+                if ( it.nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
                     SELF.parsed.push( { expression: it.nodeValue, node: it, nodeType: it.nodeType } );
                 }
             } );
@@ -243,10 +243,10 @@
         return this.parse();
     };
 
-    FancyTemplate.api.destroy = function() {
+    FancyTemplate.api.destroy = function () {
         this.element.off( "DOMNodeInserted." + NAME );
-        this.parsed.forEach( function( it ) {
-            if( it.nodeType === NODETYPE.comment ) {
+        this.parsed.forEach( function ( it ) {
+            if ( it.nodeType === NODETYPE.comment ) {
                 var newNode = $( document.createComment( it.expression.replace( "<!--", "" ).replace( ">", "" ) ) );
                 $( it.node ).replaceWith( newNode );
             } else {
@@ -256,8 +256,8 @@
         this.element.removeData( NAME );
         return null;
     };
-    FancyTemplate.api.filter  = function( name, filter ) {
-        if( Fancy.getType( filter ) === "function" ) {
+    FancyTemplate.api.filter  = function ( name, filter ) {
+        if ( Fancy.getType( filter ) === "function" ) {
             this.$filter[ name ] = filter;
         } else {
             console.error( "You can define " + (name || "a filter") + " only as function!" );
@@ -271,62 +271,57 @@
         bindClass     : NAME + "-bindings"
     };
 
-    Fancy.forbidTemplateTags = function() {
-        $A( arguments ).forEach( function( it ) {
+    Fancy.forbidTemplateTags = function () {
+        $A( arguments ).forEach( function ( it ) {
             var index       = STRIPTAGS.indexOf( it ),
                 singleIndex = SINGLETAGS.indexOf( it );
-            if( index === -1 && singleIndex === -1 ) {
+            if ( index === -1 && singleIndex === -1 ) {
                 STRIPTAGS.push( it );
-            } else if( singleIndex !== -1 ) {
+            } else if ( singleIndex !== -1 ) {
                 console.error( "singletags are forbidden by default" );
             }
         } )
     };
-    Fancy.allowTemplateTags  = function() {
-        $A( arguments ).forEach( function( it ) {
+    Fancy.allowTemplateTags  = function () {
+        $A( arguments ).forEach( function ( it ) {
             var index       = STRIPTAGS.indexOf( it ),
                 singleIndex = SINGLETAGS.indexOf( it );
-            if( index !== -1 && singleIndex === -1 ) {
+            if ( index !== -1 && singleIndex === -1 ) {
                 STRIPTAGS.splice( index, 1 );
-            } else if( singleIndex !== -1 ) {
+            } else if ( singleIndex !== -1 ) {
                 console.error( "You cannot allow singletags" );
             }
         } )
     };
-    Fancy.loadTemplate       = function( url ) {
-        var success = function() {},
-            error   = function() {};
-        if( templateCache[ url ] ) {
-            setTimeout( function() {
+    Fancy.loadTemplate       = function ( url ) {
+        var success = function () {},
+            error   = function () {};
+        if ( templateCache[ url ] ) {
+            setTimeout( function () {
                 success( templateCache[ url ].clone() );
             }, 1 );
         } else {
             $.ajax( {
                 url    : url,
                 global : false,
-                success: function( html ) {
-                    if( html.indexOf( "<" ) !== 0 ) {
-                        html                 = "<span>" + html + "</span>";
-                        templateCache[ url ] = $( $( html ) );
-                    } else {
-                        templateCache[ url ] = $( html );
-                    }
+                success: function ( html ) {
+                    templateCache[ url ] = $( html );
                     success( templateCache[ url ].clone() );
                 },
-                error  : function() {
+                error  : function () {
                     error.call( this, arguments );
                 }
             } );
         }
 
-        return function( then, not ) {
+        return function ( then, not ) {
             success = then;
             error   = not;
         };
     };
     Fancy.template           = VERSION;
-    Fancy.api.template       = function( settings ) {
-        return this.set( NAME, function( el ) {
+    Fancy.api.template       = function ( settings ) {
+        return this.set( NAME, function ( el ) {
             return new FancyTemplate( el, settings );
         }, true );
     };
