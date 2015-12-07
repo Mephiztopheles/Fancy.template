@@ -305,7 +305,12 @@
                 url    : url,
                 global : false,
                 success: function ( html ) {
-                    templateCache[ url ] = $( html );
+                    if ( html.indexOf( "<" ) !== 0 ) {
+                        html                 = "<span>" + html + "</span>";
+                        templateCache[ url ] = $( $( html ) );
+                    } else {
+                        templateCache[ url ] = $( html );
+                    }
                     success( templateCache[ url ].clone() );
                 },
                 error  : function () {
