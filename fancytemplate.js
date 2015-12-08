@@ -59,7 +59,7 @@
 
     function $eval( scope, expression ) {
 
-        var lexer = new Fancy.Lexer( expression );
+        var lexer = new Fancy.lexer( expression );
         lexer.forEach( function ( it, i ) {
             if ( parse( it, i, lexer ) ) {
                 throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
