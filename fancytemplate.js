@@ -1,3 +1,74 @@
+(function ( Fancy, $ ) {
+    function FancyEvalError( type, msg ) {
+        return new Error( "[" + type + "]: " + msg );
+    }
+
+    function isKeyword( string ) {
+        switch ( string ) {
+            case "var":
+            case "try":
+            case "while":
+            case "catch":
+            case "if":
+            case "new":
+            case "void":
+            case "this":
+            case "with":
+            case "throws":
+            case "public":
+            case "switch":
+            case "eval":
+            case "finally":
+            case "delete":
+            case "break":
+            case "class":
+            case "case":
+            case "continue":
+            case "else":
+            case "default":
+            case "do":
+            case "private":
+            case "implements":
+            case "let":
+            case "export":
+                return true;
+            default :
+                return false;
+        }
+    }
+    function parse( it, i, lexer ) {
+        var before = lexer[ i - 1 ],
+            after  = lexer[ i + 1 ];
+
+        var keywordBefore  = (before ? before[ 0 ] !== "DOT" : false),
+            keywordAfter   = (after ? after[ 0 ] !== "L_PARENTHESIS" : false),
+            keyword        = isKeyword( it[ 1 ] ) && (keywordBefore || keywordAfter),
+            isEqualsBefore = (before ? before[ 0 ] === "EQUALS" : false),
+            isEqualsAfter  = (after ? after[ 0 ] === "EQUALS" : false),
+            equals         = it[ 0 ] === "EQUALS" ? (!isEqualsAfter && !isEqualsBefore) : false;
+        return keyword || equals;
+    }
+
+    function FancyEval( $scope, $expression ) {
+        var lexer = new Fancy.lexer( $expression );
+        lexer.forEach( function ( it, i ) {
+            if ( parse( it, i, lexer ) ) {
+                throw new FancyEvalError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + $expression );
+            }
+            if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+                console.log( it[ 1 ] );
+                $expression = $expression.replace( it[ 1 ], "(this." + it[ 1 ] + " || this.$parent." + it[ 1 ] + ")" );
+            }
+        } );
+
+        return (new Function( " try{ return " + $expression + "; \r\n } catch(e){return undefined;}" ));
+    }
+
+    Fancy.eval = function ( scope, expression ) {
+        return new FancyEval( scope, expression );
+    };
+})( Fancy, $ );
+
 (function ( $ ) {
     Fancy.require( {
         jQuery: false,
