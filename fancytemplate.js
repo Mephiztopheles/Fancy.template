@@ -174,7 +174,7 @@
         this.$directives = [];
         if ( !logged ) {
             logged = true;
-            Fancy.version( SELF );
+            Fancy.version( this );
         }
         this.element.on( "DOMNodeInserted." + NAME, function () {
             SELF.compile();
@@ -224,7 +224,7 @@
         } );
         return this;
     };
-    FancyTemplate.api.eval      = function ( expression ) {
+    FancyTemplate.api.eval = function ( expression ) {
         var evaluated = null,
             SELF      = this;
         // only properties

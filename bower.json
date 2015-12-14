@@ -2,12 +2,12 @@
     "name"         : "fancy-template",
     "title"        : "Fancy-Template",
     "description"  : "JavaScript Template-Plugin for Fancy",
-    "version"      : "0.0.5",
+    "version"      : "0.0.6",
     "main"         : "fancytemplate.min.js",
     "homepage"     : "http://mephiztopheles.wtf/fancy.template",
     "author"       : {
         "name" : "Markus Ahrweiler"
-    },
+    },y
     "repository"   : {
         "type" : "git",
         "url"  : "https://github.com/Mephiztopheles/fancy.template.git"
@@ -36,6 +36,6 @@
     "license"      : "MIT",
     "dependencies" : {
         "fancy"       : ">=1.1.0",
-        "fancy-lexer" : ">=0.0.1"
+        "fancy-lexer" : ">=0.0.2"
     }
 }
