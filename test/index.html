@@ -5,7 +5,7 @@
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
         <script src="../bower_components/fancy/fancy.min.js"></script>
-        <script src="../bower_components/fancy-lexer/fancylexer.min.js"></script>
+        <script src="../bower_components/fancy-lexer/fancylexer.js"></script>
         <script src="../fancytemplate.js"></script>
 
         <script>
@@ -17,8 +17,9 @@
                     return "This is my value";
                 },
                 log     : function ( msg ) {
-                    console.log( msg );
+                    console.log.apply( console, arguments );
                 },
+                list    : [],
                 message : "Log",
                 "var"   : "test"
             };
@@ -67,9 +68,9 @@
         <br>{{ var }}
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
-        <br>{{ list }}
+        <br>{{ list.toString() }}
 
-        <div fancy-click="log(date)">{{ message }}</div>
+        <div fancy-click="log($event,list)">{{ message }}</div>
 
         <div id="test">
             <!-- 'hallo' -->

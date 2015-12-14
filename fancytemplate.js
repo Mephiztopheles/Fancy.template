@@ -36,6 +36,7 @@
                 return false;
         }
     }
+
     function parse( it, i, lexer ) {
         var before = lexer[ i - 1 ],
             after  = lexer[ i + 1 ];
@@ -49,23 +50,69 @@
         return keyword || equals;
     }
 
-    function FancyEval( $scope, $expression ) {
-        var lexer = new Fancy.lexer( $expression );
-        lexer.forEach( function ( it, i ) {
-            if ( parse( it, i, lexer ) ) {
-                throw new FancyEvalError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + $expression );
-            }
-            if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                console.log( it[ 1 ] );
-                $expression = $expression.replace( it[ 1 ], "(this." + it[ 1 ] + " || this.$parent." + it[ 1 ] + ")" );
-            }
-        } );
-
-        return (new Function( " try{ return " + $expression + "; \r\n } catch(e){return undefined;}" ));
+    function createFunction( e ) {
+        /*var fn = "\"use strict\"";
+        fn += "\r\n";
+        fn += "var fn = function(scope,parent,root) { ";
+        fn += "\r\n";
+        fn += "var v3,v4,v5,v6=l&&()"
+        return "if(" + e + " in s)"*/
+        return "(scope." + e + " || scope.$parent." + e + ")"
     }
 
-    Fancy.eval = function ( scope, expression ) {
-        return new FancyEval( scope, expression );
+    function replaceAt( string, index, regex, character ) {
+        return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
+    }
+
+    function FancyParse( $expression, type ) {
+        var lexer = new Fancy.lexer( $expression );
+        switch ( type ) {
+            case "function":
+                var appendix = 0;
+                if ( $expression.match( /[^=]+=[^=]+/g ) ) {
+                    lexer.forEach( function ( it, i ) {
+                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+                            $expression = replaceAt( $expression, appendix, it[ 1 ], "scope." + it[ 1 ] );
+                            appendix += 6 + it[ 1 ].length;
+                        }
+                    } );
+                } else {
+                    lexer.forEach( function ( it, i ) {
+                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+                            $expression = replaceAt( $expression, appendix, it[ 1 ], createFunction( it[ 1 ] ) );
+                            appendix += 26 + (it[ 1 ].length * 2);
+                        }
+                    } );
+                }
+                break;
+            default:
+                if ( $expression.match( /[^=]+=[^=]+/g ) ) {
+                    throw new FancyEvalError( "Eval", "Syntax Error: Token '=' is an unexpected token at " + $expression );
+                } else {
+                    lexer.forEach( function ( it, i ) {
+                        if ( parse( it, i, lexer ) ) {
+                            throw new FancyEvalError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + $expression );
+                        }
+                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
+                            $expression = $expression.replace( it[ 1 ], createFunction( it[ 1 ] ) );
+                        }
+                    } );
+                }
+                break;
+        }
+        return (new Function( "scope", " try{ return " + $expression + "; \r\n } catch(e){return undefined;}" ));
+    }
+
+
+    function FancyEval( $expression ) {
+        return FancyParse( $expression, "string" );
+    }
+
+    Fancy.eval  = function ( expression ) {
+        return new FancyEval( expression );
+    };
+    Fancy.parse = function ( expression ) {
+        return new FancyParse( expression, "function" );
     };
 })( Fancy, $ );
 
@@ -100,67 +147,6 @@
         return str.replace( /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&" );
     }
 
-    function isKeyword( string ) {
-        switch ( string ) {
-            case "var":
-            case "try":
-            case "while":
-            case "catch":
-            case "if":
-            case "new":
-            case "void":
-            case "this":
-            case "with":
-            case "throws":
-            case "public":
-            case "switch":
-            case "eval":
-            case "finally":
-            case "delete":
-            case "break":
-            case "class":
-            case "case":
-            case "continue":
-            case "else":
-            case "default":
-            case "do":
-            case "private":
-            case "implements":
-            case "let":
-            case "export":
-                return true;
-            default :
-                return false;
-        }
-    }
-
-    function $eval( scope, expression ) {
-
-        var lexer = new Fancy.lexer( expression );
-        lexer.forEach( function ( it, i ) {
-            if ( parse( it, i, lexer ) ) {
-                throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
-            }
-            if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                expression = expression.replace( it[ 1 ], "this." + it[ 1 ] + " || this.$parent." + it[ 1 ] );
-            }
-        } );
-
-        return (new Function( " try{ return " + expression + "; \r\n } catch(e){return '';}" )).call( scope );
-    }
-
-    function parse( it, i, lexer ) {
-        var before = lexer[ i - 1 ],
-            after  = lexer[ i + 1 ];
-
-        var keywordBefore  = (before ? before[ 0 ] !== "DOT" : false),
-            keywordAfter   = (after ? after[ 0 ] !== "L_PARENTHESIS" : false),
-            keyword        = isKeyword( it[ 1 ] ) && (keywordBefore || keywordAfter),
-            isEqualsBefore = (before ? before[ 0 ] === "EQUALS" : false),
-            isEqualsAfter  = (after ? after[ 0 ] === "EQUALS" : false),
-            equals         = it[ 0 ] === "EQUALS" ? (!isEqualsAfter && !isEqualsBefore) : false;
-        return keyword || equals;
-    }
 
     function getExpression( l, r ) {
         var L = escapeRegExp( l ),
@@ -176,11 +162,6 @@
                 }
             }
         }
-    }
-
-
-    function FancyTemplateError( type, msg ) {
-        return new Error( "[" + type + "]: " + msg );
     }
 
     function FancyTemplate( $el, settings ) {
@@ -258,15 +239,15 @@
                 filters.splice( 0, 1 );
                 try {
                     filters.forEach( function ( it ) {
-                        args.push( $eval( scope, it ) );
+                        args.push( Fancy.eval( it )( scope ) );
                     } );
                     return SELF.$filter[ name ].apply( this, args );
                 } catch ( e ) {
                     return value;
                 }
-            })( SELF.settings.scope, expression.match( /\|(\w*)/ )[ 1 ], $eval( SELF.settings.scope, expression.split( "|" )[ 0 ] ), expression.split( "|" )[ 1 ] );
+            })( SELF.settings.scope, expression.match( /\|(\w*)/ )[ 1 ], Fancy.eval( expression.split( "|" )[ 0 ] )( SELF.settings.scope ), expression.split( "|" )[ 1 ] );
         } else {
-            evaluated = $eval( SELF.settings.scope, expression );
+            evaluated = Fancy.eval( expression )( SELF.settings.scope );
         }
         if ( Fancy.getType( evaluated ) === "null" || Fancy.getType( evaluated ) === "undefined" ) {
             return "";
@@ -296,7 +277,8 @@
                                 case "&":
                                     scope[ prop ] = function ( options ) {
                                         var attr = $( $el ).attr( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop );
-                                        template.eval( attr );
+                                        var fn   = Fancy.parse( attr, true );
+                                        fn( $.extend( {}, scope, options ) );
                                         SELF.update();
                                     };
                                     break;
