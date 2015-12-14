@@ -10,32 +10,40 @@
 
         <script>
             var scope = {
-                user : "Markus", date: new Date(), num: 10, getValue: function() {
+                user    : "Markus",
+                date    : new Date(),
+                num     : 10,
+                getValue: function () {
                     return "This is my value";
                 },
-                "var": "test"
+                log     : function ( msg ) {
+                    console.log( msg );
+                },
+                message : "Log",
+                "var"   : "test"
             };
             var filter = {
-                "date"    : function( value ) {
+                "date"    : function ( value ) {
                     return value.toLocaleString();
                 },
-                "currency": function( value, symbol ) {
+                "currency": function ( value, symbol ) {
                     return value.toFixed( 2 ) + " " + symbol;
                 }
             };
             Fancy.allowTemplateTags( "u" );
-            $( function() {
+            $( function () {
                 var t = new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ),
                     b = new Fancy( "body" ).template( { scope: scope } );
-                for( var i in filter ) {
-                    if( filter.hasOwnProperty( i ) ) {
-                        t.filter( i, filter[ i ] );
+                for ( var i in filter ) {
+                    if ( filter.hasOwnProperty( i ) ) {
+                        b.filter( i, filter[ i ] );
                     }
                 }
+
                 t.compile();
                 b.compile();
 
-                setTimeout( function() {
+                setTimeout( function () {
                     scope.test = "Hallo User";
                     b.update();
                 }, 3000 );
@@ -60,6 +68,9 @@
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
         <br>{{ list }}
+
+        <div fancy-click="log(date)">{{ message }}</div>
+
         <div id="test">
             <!-- 'hallo' -->
         </div>

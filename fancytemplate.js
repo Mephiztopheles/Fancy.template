@@ -15,6 +15,12 @@
         },
         logged        = false;
 
+    function toDashCase( str ) {
+        return str.replace( /[A-Z][a-z]/g, function ( match ) {
+            return "-" + match.toLowerCase();
+        } );
+    }
+
     function $A( args ) {
         return Array.prototype.slice.call( args );
     }
@@ -65,7 +71,7 @@
                 throw new FancyTemplateError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + expression );
             }
             if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                expression = expression.replace( it[ 1 ], "this." + it[ 1 ] );
+                expression = expression.replace( it[ 1 ], "this." + it[ 1 ] + " || this.$parent." + it[ 1 ] );
             }
         } );
 
@@ -91,18 +97,29 @@
         return new RegExp( "(?:" + L + ")([^" + L + R + "]*)(?:" + R + ")", "g" );
     }
 
+    function each( o, fn ) {
+        for ( var i in o ) {
+            if ( o.hasOwnProperty( i ) ) {
+                if ( fn.call( o[ i ], i, o[ i ] ) === false ) {
+                    break;
+                }
+            }
+        }
+    }
+
 
     function FancyTemplateError( type, msg ) {
         return new Error( "[" + type + "]: " + msg );
     }
 
     function FancyTemplate( $el, settings ) {
-        var SELF      = this;
-        this.element  = $el;
-        this.settings = $.extend( {}, Fancy.settings [ NAME ], settings );
-        this.id       = id++;
-        this.parsed   = [];
-        this.$filter  = {};
+        var SELF         = this;
+        this.element     = $el;
+        this.settings    = $.extend( {}, Fancy.settings [ NAME ], settings );
+        this.id          = id++;
+        this.parsed      = [];
+        this.$filter     = {};
+        this.$directives = [];
         if ( !logged ) {
             logged = true;
             Fancy.version( SELF );
@@ -110,14 +127,24 @@
         this.element.on( "DOMNodeInserted." + NAME, function () {
             SELF.compile();
         } );
-
+        this.directive( "fancyClick", function () {
+            return {
+                restrict: "A",
+                scope   : { "click": "&fancyClick" },
+                link    : function ( $scope, $el ) {
+                    $el.on( "click", function ( e ) {
+                        $scope.click( { $event: e } );
+                    } );
+                }
+            };
+        } );
         return this;
     }
 
     FancyTemplate.api = FancyTemplate.prototype = {};
-    FancyTemplate.api.version = VERSION;
-    FancyTemplate.api.name    = NAME;
-    FancyTemplate.api.update  = function ( scope ) {
+    FancyTemplate.api.version   = VERSION;
+    FancyTemplate.api.name      = NAME;
+    FancyTemplate.api.update    = function ( scope ) {
         var SELF = this;
         if ( scope ) {
             SELF.settings.scope = scope;
@@ -125,8 +152,7 @@
         this.parse();
         return this;
     };
-
-    FancyTemplate.api.parse = function () {
+    FancyTemplate.api.parse     = function () {
         var SELF = this,
             l    = this.settings.leftDelimiter,
             r    = this.settings.rightDelimiter;
@@ -139,15 +165,14 @@
         this.parsed.forEach( function ( it, i ) {
             it.node.nodeValue = it.parsed;
             if ( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
-                var newNode = $( document.createTextNode( it.parsed ) );
+                var newNode           = $( document.createTextNode( it.parsed ) );
                 $( it.node ).replaceWith( newNode );
                 SELF.parsed[ i ].node = newNode[ 0 ];
             }
         } );
         return this;
     };
-
-    FancyTemplate.api.eval = function ( expression ) {
+    FancyTemplate.api.eval      = function ( expression ) {
         var evaluated = null,
             SELF      = this;
         // only properties
@@ -177,11 +202,41 @@
         }
         return evaluated;
     };
-
-    FancyTemplate.api.compile = function () {
+    FancyTemplate.api.compile   = function () {
         var SELF = this,
             nodes;
-
+        SELF.$directives.forEach( function ( directive ) {
+            directive.elements = directive.elements || [];
+            if ( ~directive.restrict.indexOf( "A" ) ) {
+                var elements = SELF.element.find( "[" + directive.name + "]" );
+                elements.each( function ( index, $el ) {
+                    if ( ~$( directive.elements ).index( $el ) ) {
+                        return;
+                    }
+                    directive.elements.push( $el );
+                    var scope = SELF.settings.scope;
+                    if ( directive.scope ) {
+                        scope           = {
+                            $parent: SELF.settings.scope
+                        };
+                        scope.prototype = SELF.settings.scope;
+                        each( directive.scope, function ( prop, o ) {
+                            switch ( this[ 0 ] ) {
+                                case "&":
+                                    scope[ prop ] = function ( options ) {
+                                        var attr = $( $el ).attr( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop );
+                                        template.eval( attr );
+                                        SELF.update();
+                                    };
+                                    break;
+                            }
+                        } );
+                    }
+                    var template = Fancy( this ).template( { scope: scope } );
+                    directive.link( scope, $( this ) );
+                } )
+            }
+        } );
         function getTextNodesIn( node ) {
             var textNodes = [], nonWhitespaceMatcher = /\S/;
 
@@ -242,8 +297,7 @@
 
         return this.parse();
     };
-
-    FancyTemplate.api.destroy = function () {
+    FancyTemplate.api.destroy   = function () {
         this.element.off( "DOMNodeInserted." + NAME );
         this.parsed.forEach( function ( it ) {
             if ( it.nodeType === NODETYPE.comment ) {
@@ -256,12 +310,30 @@
         this.element.removeData( NAME );
         return null;
     };
-    FancyTemplate.api.filter  = function ( name, filter ) {
+    FancyTemplate.api.filter    = function ( name, filter ) {
         if ( Fancy.getType( filter ) === "function" ) {
             this.$filter[ name ] = filter;
         } else {
             console.error( "You can define " + (name || "a filter") + " only as function!" );
         }
+    };
+    FancyTemplate.api.directive = function ( name, directive ) {
+        var d  = directive.call( this );
+        d.name = toDashCase( name );
+        if ( Fancy.getType( d.restrict ) === "string" ) {
+            d.restrict = (function ( list ) {
+                var l = [];
+                list.forEach( function ( item ) {
+                    if ( !~l.indexOf( item.toUpperCase() ) ) {
+                        l.push( item.toUpperCase() );
+                    }
+                } );
+                return l;
+            })( d.restrict.split( "" ) );
+        } else {
+            d.restrict = [ "A" ];
+        }
+        this.$directives.push( d );
     };
 
     Fancy.settings [ NAME ] = {
