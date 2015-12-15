@@ -1,4 +1,8 @@
-(function ( Fancy, $ ) {
+(function ( Fancy ) {
+    var SCOPE_NAME = "s",
+        EXTRA_NAME = "l",
+        ROOT_NAME  = SCOPE_NAME + ".$root";
+
     function FancyEvalError( type, msg ) {
         return new Error( "[" + type + "]: " + msg );
     }
@@ -43,87 +47,75 @@
 
         var keywordBefore  = (before ? before[ 0 ] !== "DOT" : false),
             keywordAfter   = (after ? after[ 0 ] !== "L_PARENTHESIS" : false),
-            keyword        = isKeyword( it[ 1 ] ) && (keywordBefore || keywordAfter),
+            keyword        = isKeyword( it.value ) && (keywordBefore || keywordAfter),
             isEqualsBefore = (before ? before[ 0 ] === "EQUALS" : false),
             isEqualsAfter  = (after ? after[ 0 ] === "EQUALS" : false),
             equals         = it[ 0 ] === "EQUALS" ? (!isEqualsAfter && !isEqualsBefore) : false;
         return keyword || equals;
     }
 
-    function createFunction( e ) {
-        /*var fn = "\"use strict\"";
-        fn += "\r\n";
-        fn += "var fn = function(scope,parent,root) { ";
-        fn += "\r\n";
-        fn += "var v3,v4,v5,v6=l&&()"
-        return "if(" + e + " in s)"*/
-        return "(scope." + e + " || scope.$parent." + e + ")"
-    }
-
     function replaceAt( string, index, regex, character ) {
         return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
     }
 
-    function FancyParse( $expression, type ) {
-        var lexer = new Fancy.lexer( $expression );
-        switch ( type ) {
-            case "function":
-                var appendix = 0;
-                if ( $expression.match( /[^=]+=[^=]+/g ) ) {
-                    lexer.forEach( function ( it, i ) {
-                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                            $expression = replaceAt( $expression, appendix, it[ 1 ], "scope." + it[ 1 ] );
-                            appendix += 6 + it[ 1 ].length;
-                        }
-                    } );
-                } else {
-                    lexer.forEach( function ( it, i ) {
-                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                            $expression = replaceAt( $expression, appendix, it[ 1 ], createFunction( it[ 1 ] ) );
-                            appendix += 26 + (it[ 1 ].length * 2);
-                        }
-                    } );
-                }
-                break;
-            default:
-                if ( $expression.match( /[^=]+=[^=]+/g ) ) {
-                    throw new FancyEvalError( "Eval", "Syntax Error: Token '=' is an unexpected token at " + $expression );
-                } else {
-                    lexer.forEach( function ( it, i ) {
-                        if ( parse( it, i, lexer ) ) {
-                            throw new FancyEvalError( "Eval", "Syntax Error: Token '" + it[ 1 ] + "' is an unexpected token at " + $expression );
-                        }
-                        if ( it[ 0 ] === "IDENTIFIER" && (lexer[ i - 1 ] ? lexer[ i - 1 ][ 0 ] !== "DOT" : true) ) {
-                            $expression = $expression.replace( it[ 1 ], createFunction( it[ 1 ] ) );
-                        }
-                    } );
-                }
-                break;
+    function FancyParse( $expression ) {
+        var lexer    = new Fancy.lexer( $expression ),
+            appendix = 0;
+
+        function _in( o, v ) {
+            return '(' + o + ' && "' + v + '" in ' + o + ')';
         }
-        return (new Function( "scope", " try{ return " + $expression + "; \r\n } catch(e){return undefined;}" ));
+
+        var varCount      = 0,
+            fnString      = "return " + $expression.trim(),
+            isParamHeader = false;
+        lexer.forEach( function ( it, i ) {
+            var isParameter = it.key === "IDENTIFIER",
+                firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true);
+            if ( isParamHeader && isParameter && firstPart ) {
+                updateFn( "var v" + varCount + ";if(" + _in( EXTRA_NAME, it.value ) + "){v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+            } else if ( isParameter && firstPart ) {
+                updateFn( "var v" + varCount + ";if(" + _in( SCOPE_NAME, it.value ) + "){v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}else if(" + _in( ROOT_NAME, it.value ) + "){v" + varCount + "=" + ROOT_NAME + "." + it.value + ";}" );
+            }
+            if ( it.key === "L_PARENTHESIS" ) {
+                isParamHeader = true;
+            }
+            if ( it.key === "R_PARENTHESIS" ) {
+                isParamHeader = false;
+            }
+            function updateFn( replacement ) {
+                fnString = replacement + fnString;
+                appendix += replacement.length;
+                fnString = replaceAt( fnString, appendix, it.value, "v" + varCount );
+                varCount++;
+            }
+
+        } );
+        var fn = (new Function( "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
+        return fn();
     }
 
 
     function FancyEval( $expression ) {
-        return FancyParse( $expression, "string" );
+        return FancyParse( $expression );
     }
 
-    Fancy.eval  = function ( expression ) {
-        return new FancyEval( expression );
+    Fancy.eval  = function ( expression, scope ) {
+        return new FancyEval( expression, scope );
     };
     Fancy.parse = function ( expression ) {
-        return new FancyParse( expression, "function" );
+        return new FancyParse( expression );
     };
-})( Fancy, $ );
+})( Fancy );
 
-(function ( $ ) {
+(function ( Fancy, $ ) {
     Fancy.require( {
         jQuery: false,
-        Fancy : "1.1.0"
+        Fancy : "1.3.0"
     } );
     var id            = 0,
         NAME          = "FancyTemplate",
-        VERSION       = "0.0.5",
+        VERSION       = "0.1.0",
         templateCache = {},
         SINGLETAGS    = [ "br", "link", "img", "meta", "param", "input", "source", "track" ],
         STRIPTAGS     = [ "b", "i", "u" ],
@@ -136,6 +128,12 @@
     function toDashCase( str ) {
         return str.replace( /[A-Z][a-z]/g, function ( match ) {
             return "-" + match.toLowerCase();
+        } );
+    }
+
+    function toCamelCase( str ) {
+        return str.replace( /([a-z])-([a-z])/g, function ( match, $1, $2 ) {
+            return $1 + $2.toUpperCase();
         } );
     }
 
@@ -182,10 +180,11 @@
         this.directive( "fancyClick", function () {
             return {
                 restrict: "A",
-                scope   : { "click": "&fancyClick" },
-                link    : function ( $scope, $el ) {
+                scope   : false,
+                link    : function ( $scope, $el, $attr ) {
                     $el.on( "click", function ( e ) {
-                        $scope.click( { $event: e } );
+                        var click = Fancy.parse( $attr.fancyClick );
+                        click( SELF.settings.scope, { $event: e } );
                     } );
                 }
             };
@@ -217,14 +216,14 @@
         this.parsed.forEach( function ( it, i ) {
             it.node.nodeValue = it.parsed;
             if ( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
-                var newNode           = $( document.createTextNode( it.parsed ) );
+                var newNode = $( document.createTextNode( it.parsed ) );
                 $( it.node ).replaceWith( newNode );
                 SELF.parsed[ i ].node = newNode[ 0 ];
             }
         } );
         return this;
     };
-    FancyTemplate.api.eval = function ( expression ) {
+    FancyTemplate.api.eval      = function ( expression ) {
         var evaluated = null,
             SELF      = this;
         // only properties
@@ -249,7 +248,7 @@
         } else {
             evaluated = Fancy.eval( expression )( SELF.settings.scope );
         }
-        if ( Fancy.getType( evaluated ) === "null" || Fancy.getType( evaluated ) === "undefined" ) {
+        if ( Fancy.undefined( evaluated ) ) {
             return "";
         }
         return evaluated;
@@ -277,16 +276,20 @@
                                 case "&":
                                     scope[ prop ] = function ( options ) {
                                         var attr = $( $el ).attr( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop );
-                                        var fn   = Fancy.parse( attr, true );
-                                        fn( $.extend( {}, scope, options ) );
+                                        var fn   = Fancy.parse( attr );
+                                        fn( scope, options );
                                         SELF.update();
                                     };
                                     break;
                             }
                         } );
                     }
+                    var attrs = {};
+                    $A( $el.attributes ).forEach( function ( attr ) {
+                        attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
+                    } );
                     var template = Fancy( this ).template( { scope: scope } );
-                    directive.link( scope, $( this ) );
+                    directive.link( scope, $( this ), attrs );
                 } )
             }
         } );
@@ -456,4 +459,4 @@
         }, true );
     };
 
-})( jQuery );
+})( Fancy, jQuery );

@@ -40,14 +40,13 @@
                         b.filter( i, filter[ i ] );
                     }
                 }
-
-                t.compile();
+//
                 b.compile();
-
-                setTimeout( function () {
-                    scope.test = "Hallo User";
-                    b.update();
-                }, 3000 );
+//                t.compile();
+                /*setTimeout( function () {
+                 scope.test = "Hallo User";
+                 b.update();
+                 }, 3000 );*/
             } );
         </script>
     </head>
@@ -69,6 +68,7 @@
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
         <br>{{ list.toString() }}
+        <br> {{ log("hallo", $event) }}
 
         <div fancy-click="log($event,list)">{{ message }}</div>
 
