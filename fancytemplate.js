@@ -7,51 +7,13 @@
         return new Error( "[" + type + "]: " + msg );
     }
 
-    function isKeyword( string ) {
-        switch ( string ) {
-            case "var":
-            case "try":
-            case "while":
-            case "catch":
-            case "if":
-            case "new":
-            case "void":
-            case "this":
-            case "with":
-            case "throws":
-            case "public":
-            case "switch":
-            case "eval":
-            case "finally":
-            case "delete":
-            case "break":
-            case "class":
-            case "case":
-            case "continue":
-            case "else":
-            case "default":
-            case "do":
-            case "private":
-            case "implements":
-            case "let":
-            case "export":
+    function isKeyword( value ) {
+        switch ( value ) {
+            case "true":
+            case "false":
                 return true;
-            default :
-                return false;
         }
-    }
-
-    function parse( it, i, lexer ) {
-        var before = lexer[ i - 1 ],
-            after  = lexer[ i + 1 ];
-
-        var keywordBefore  = (before ? before[ 0 ] !== "DOT" : false),
-            keywordAfter   = (after ? after[ 0 ] !== "L_PARENTHESIS" : false),
-            keyword        = isKeyword( it.value ) && (keywordBefore || keywordAfter),
-            isEqualsBefore = (before ? before[ 0 ] === "EQUALS" : false),
-            isEqualsAfter  = (after ? after[ 0 ] === "EQUALS" : false),
-            equals         = it[ 0 ] === "EQUALS" ? (!isEqualsAfter && !isEqualsBefore) : false;
-        return keyword || equals;
+        return false;
     }
 
     function replaceAt( string, index, regex, character ) {
@@ -70,9 +32,14 @@
             fnString      = "return " + $expression.trim(),
             isParamHeader = false;
         lexer.forEach( function ( it, i ) {
-            var isParameter = it.key === "IDENTIFIER",
+            var isParameter = it.key === "IDENTIFIER" && !isKeyword( it.value ),
+                isAssign    = (lexer[ i + 1 ] ? lexer[ i + 1 ].key === "EQUALS" : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== "EQUALS" : false),
                 firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true);
-            if ( isParamHeader && isParameter && firstPart ) {
+            if ( isParameter && isAssign ) {
+                var replacement = "" + SCOPE_NAME + "." + it.value;
+                fnString        = replaceAt( fnString, appendix, it.value, replacement );
+                appendix += replacement.length;
+            } else if ( isParamHeader && isParameter && firstPart ) {
                 updateFn( "var v" + varCount + ";if(" + _in( EXTRA_NAME, it.value ) + "){v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
             } else if ( isParameter && firstPart ) {
                 updateFn( "var v" + varCount + ";if(" + _in( SCOPE_NAME, it.value ) + "){v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}else if(" + _in( ROOT_NAME, it.value ) + "){v" + varCount + "=" + ROOT_NAME + "." + it.value + ";}" );
@@ -91,7 +58,7 @@
             }
 
         } );
-        var fn = (new Function( "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
+        var fn            = (new Function( "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
         return fn();
     }
 
@@ -123,6 +90,7 @@
             comment: 8,
             text   : 3
         },
+        DIRECTIVES    = [],
         logged        = false;
 
     function toDashCase( str ) {
@@ -162,6 +130,48 @@
         }
     }
 
+    DIRECTIVES.push( function ( SELF ) {
+        SELF.directive( "fancyClick", function () {
+            return {
+                restrict: "A",
+                scope   : false,
+                link    : function ( $scope, $el, $attr ) {
+                    $el.on( "click", function ( e ) {
+                        var click = Fancy.parse( $attr.fancyClick );
+                        click( SELF.settings.scope, { $event: e } );
+                        SELF.update();
+                    } );
+                }
+            };
+        } );
+    }, function ( SELF ) {
+        SELF.directive( "fancyEach", function () {
+            return {
+                restrict: "A",
+                scope   : true,
+                link    : function ( $scope, $el, $attr ) {
+                    var commentStart = $( document.createComment( "fancyEach:start" ) ),
+                        commentEnd   = $( document.createComment( "fancyEach:start" ) ),
+                        el           = $el.clone();
+                    $el.before( commentStart );
+                    $el.after( commentEnd );
+                    $el.remove();
+
+                    SELF.watch( $attr.fancyEach.split( "in" )[ 1 ], reload );
+                    function reload() {
+                        var items = Fancy.parse( $attr.fancyEach.split( "in" )[ 1 ] )( $scope.$parent );
+                        items.forEach( function ( it ) {
+                            var tpl = el.clone();
+                            tpl.html( JSON.stringify( it ) );
+                            commentEnd.before( tpl );
+                        } );
+                    }
+
+                }
+            };
+        } );
+    } );
+
     function FancyTemplate( $el, settings ) {
         var SELF         = this;
         this.element     = $el;
@@ -170,24 +180,13 @@
         this.parsed      = [];
         this.$filter     = {};
         this.$directives = [];
+        this.$listener   = [];
         if ( !logged ) {
             logged = true;
             Fancy.version( this );
         }
-        this.element.on( "DOMNodeInserted." + NAME, function () {
-            SELF.compile();
-        } );
-        this.directive( "fancyClick", function () {
-            return {
-                restrict: "A",
-                scope   : false,
-                link    : function ( $scope, $el, $attr ) {
-                    $el.on( "click", function ( e ) {
-                        var click = Fancy.parse( $attr.fancyClick );
-                        click( SELF.settings.scope, { $event: e } );
-                    } );
-                }
-            };
+        DIRECTIVES.forEach( function ( dir ) {
+            dir( SELF );
         } );
         return this;
     }
@@ -208,18 +207,33 @@
             l    = this.settings.leftDelimiter,
             r    = this.settings.rightDelimiter;
         this.parsed.forEach( function ( it ) {
-            var expressions = getExpression( l, r );
-            it.parsed       = it.expression.replace( expressions, function ( match, $1 ) {
+            var expressions   = getExpression( l, r );
+            it.parsed         = it.expression.replace( expressions, function ( match, $1 ) {
                 return SELF.eval( $1 );
             } );
-        } );
-        this.parsed.forEach( function ( it, i ) {
             it.node.nodeValue = it.parsed;
             if ( it.nodeType === NODETYPE.comment && it.node.nodeType === it.nodeType ) {
-                var newNode = $( document.createTextNode( it.parsed ) );
+                var newNode           = $( document.createTextNode( it.parsed ) );
                 $( it.node ).replaceWith( newNode );
                 SELF.parsed[ i ].node = newNode[ 0 ];
             }
+        } );
+
+        this.$listener.forEach( function ( it, i ) {
+            var value = Fancy.parse( it.value )( SELF.settings.scope );
+            console.log( value, it.last )
+            if ( Fancy.getType( value ) !== Fancy.getType( it.last ) ) {
+                it.callback.call( SELF, value, it.last );
+                SELF.$listener[ i ].last = value;
+                return;
+            }
+            switch ( Fancy.getType( value ) ) {
+                case "array":
+                    if ( value.length !== it.last.length ) {
+                        it.callback.call( SELF, value, it.last );
+                    }
+            }
+            SELF.$listener[ i ].last = value;
         } );
         return this;
     };
@@ -267,10 +281,9 @@
                     directive.elements.push( $el );
                     var scope = SELF.settings.scope;
                     if ( directive.scope ) {
-                        scope           = {
+                        scope = {
                             $parent: SELF.settings.scope
                         };
-                        scope.prototype = SELF.settings.scope;
                         each( directive.scope, function ( prop, o ) {
                             switch ( this[ 0 ] ) {
                                 case "&":
@@ -284,7 +297,7 @@
                             }
                         } );
                     }
-                    var attrs = {};
+                    var attrs    = {};
                     $A( $el.attributes ).forEach( function ( attr ) {
                         attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
                     } );
@@ -390,6 +403,15 @@
             d.restrict = [ "A" ];
         }
         this.$directives.push( d );
+    };
+    FancyTemplate.api.watch     = function ( expression, callback ) {
+        var SELF  = this;
+        var value = Fancy.parse( expression )( SELF.settings.scope );
+        SELF.$listener.push( {
+            value   : expression,
+            last    : value,
+            callback: callback
+        } );
     };
 
     Fancy.settings [ NAME ] = {

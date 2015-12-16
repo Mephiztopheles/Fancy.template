@@ -41,6 +41,8 @@
                     }
                 }
 //
+
+
                 b.compile();
 //                t.compile();
                 /*setTimeout( function () {
@@ -48,6 +50,17 @@
                  b.update();
                  }, 3000 );*/
             } );
+            var _s = { list: [] };
+            var test = (function () {
+                "use strict";
+                return function ( s, l ) {
+                    try {
+                        var v0;
+                        if ( (s && "list" in s) ) {v0 = s.list;} else if ( (s.$root && "list" in s.$root) ) {v0 = s.$root.list;}
+                        return v0 = [ 1, 2 ];
+                    } catch ( e ) { return undefined; }
+                }
+            })()( _s );
         </script>
     </head>
     <body>
@@ -68,9 +81,12 @@
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
         <br>{{ list.toString() }}
-        <br> {{ log("hallo", $event) }}
 
         <div fancy-click="log($event,list)">{{ message }}</div>
+
+        <div fancy-click="list = [1,2]">{{ message }}</div>
+
+        <div fancy-each="item in list">{{ item }}</div>
 
         <div id="test">
             <!-- 'hallo' -->
