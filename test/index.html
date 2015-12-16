@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
-        <script src="../bower_components/fancy/fancy.min.js"></script>
+        <script src="../bower_components/fancy/fancy.js"></script>
         <script src="../bower_components/fancy-lexer/fancylexer.js"></script>
         <script src="../fancytemplate.js"></script>
 
@@ -18,6 +18,9 @@
                 },
                 log     : function ( msg ) {
                     console.log.apply( console, arguments );
+                },
+                push    : function () {
+                    scope.list.push( scope.list.length + 1 );
                 },
                 list    : [],
                 message : "Log",
@@ -34,18 +37,16 @@
             Fancy.allowTemplateTags( "u" );
             $( function () {
                 var t = new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ),
-                    b = new Fancy( "body" ).template( { scope: scope } );
-                for ( var i in filter ) {
-                    if ( filter.hasOwnProperty( i ) ) {
-                        b.filter( i, filter[ i ] );
-                    }
-                }
-                b.compile();
-//                t.compile();
-                /*setTimeout( function () {
-                 scope.test = "Hallo User";
-                 b.update();
-                 }, 3000 );*/
+                    b = new Fancy( "body" ).template( { scope: scope, filter: filter, directives: {} } );
+
+                setTimeout( function () {
+                    b.$scope.test = "Hallo User";
+                    b.update();
+                }, 3000 );
+                setInterval( function () {
+                    b.$scope.list.push( b.$scope.list.length + 1 );
+                    b.update();
+                }, 3000 );
             } );
         </script>
     </head>
@@ -70,9 +71,9 @@
 
         <div fancy-click="log($event,list)">{{ message }}</div>
 
-        <div fancy-click="list = [1,2]">{{ message }}</div>
+        <div fancy-click="push()">{{ message }}</div>
 
-        <div fancy-each="item in list">{{ item }}</div>
+        <span fancy-each="item in list">{{ $index + ": " + item + ", "  }}</span>
 
         <div id="test">
             <!-- 'hallo' -->
