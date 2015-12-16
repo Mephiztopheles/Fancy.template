@@ -73,7 +73,7 @@
 
         <div fancy-click="push()">{{ message }}</div>
 
-        <span fancy-each="item in list">{{ $index + ": " + item + ", "  }}</span>
+        <div fancy-each="item in list"><b>{{ $index }}:</b> {{ item }}</div>
 
         <div id="test">
             <!-- 'hallo' -->
