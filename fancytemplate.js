@@ -157,12 +157,9 @@
 
         var list = getAllElements( element );
         list.each( function () {
-            var el = this;
             if ( this.attributes && this.attributes ) {
-
                 $A( this.attributes ).forEach( function ( attr ) {
                     var expression = checkExpression( SELF, attr.nodeValue );
-                    console.log( expression, attr.nodeValue );
                     if ( expression ) {
                         expression     = SELF.eval( expression );
                         attr.nodeValue = Fancy.undefined( expression ) ? "" : expression;
