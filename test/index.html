@@ -19,34 +19,42 @@
                 log     : function ( msg ) {
                     console.log.apply( console, arguments );
                 },
-                push    : function () {
+                push    : function ( e ) {
+                    e.preventDefault();
                     scope.list.push( scope.list.length + 1 );
                 },
                 list    : [],
                 message : "Log",
                 "var"   : "test"
-            };
-            var filter = {
-                "date"    : function ( value ) {
-                    return value.toLocaleString();
-                },
-                "currency": function ( value, symbol ) {
-                    return value.toFixed( 2 ) + " " + symbol;
-                }
-            };
+            }, b;
             Fancy.allowTemplateTags( "u" );
             $( function () {
-                var t = new Fancy( "#test" ).template( { leftDelimiter: "<!", rightDelimiter: ">" } ),
-                    b = new Fancy( "body" ).template( { scope: scope, filter: filter, directives: {} } );
+                b = new Fancy( "body" ).template( { scope: scope } );
 
+                b.filter( "date", function ( value ) {
+                    return value.toLocaleString();
+                } ).filter( "currency", function ( value, symbol ) {
+                    return value.toFixed( 2 ) + " " + symbol;
+                } ).directive( "test", function () {
+                    return {
+                        scope: {
+                            info: "="
+                        },
+                        link : function ( $scope ) {
+                            console.log( $scope );
+                        }
+                    };
+                } );
+                b.bootstrap();
                 setTimeout( function () {
                     b.$scope.test = "Hallo User";
                     b.update();
                 }, 3000 );
-                setInterval( function () {
+
+                /*setInterval( function () {
                     b.$scope.list.push( b.$scope.list.length + 1 );
                     b.update();
-                }, 3000 );
+                }, 3000 );*/
             } );
         </script>
     </head>
@@ -68,16 +76,17 @@
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue() }}
         <br>{{ list.toString() }}
+        <div id="test">
+            <div id="test-child"></div>
+        </div>
+        <test info="var"></test>
+        <div info="{{ var }}"></div>
 
         <div fancy-click="log($event,list)">{{ message }}</div>
 
-        <div fancy-click="push()">{{ message }}</div>
+        <a href="#" fancy-click="push($event)">{{ 'Add index' }}</a>
 
         <div fancy-each="item in list"><b>{{ $index }}:</b> {{ item }}</div>
-
-        <div id="test">
-            <!-- 'hallo' -->
-        </div>
 
         <div id="list"></div>
     </body>

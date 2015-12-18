@@ -33,7 +33,7 @@
         return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
     }
 
-    function Parse( $expression, $filter ) {
+    function $parse( $expression, $filter ) {
         var lexer    = new Fancy.lexer( $expression ),
             appendix = 0;
 
@@ -56,7 +56,7 @@
                     fnString = replaceAt( fnString, appendix, ":", "," );
                     appendix += 1;
                 } else if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
-                    updateFn( "var v" + varCount + ";if(" + _in( EXTRA_NAME, it.value ) + "){v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                    updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
                 }
                 if ( !lexer[ i + 1 ] ) {
                     fnString += ")";
@@ -79,9 +79,9 @@
                 fnString    = replaceAt( fnString, appendix, it.value, replacement );
                 appendix += replacement.length;
             } else if ( isParamHeader && isParameter && firstPart ) {
-                updateFn( "var v" + varCount + ";if(" + _in( EXTRA_NAME, it.value ) + "){v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
             } else if ( isParameter && firstPart ) {
-                updateFn( "var v" + varCount + ";if(" + _in( SCOPE_NAME, it.value ) + "){v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}else if(" + _in( ROOT_NAME, it.value ) + "){v" + varCount + "=" + ROOT_NAME + "." + it.value + ";}" );
+                updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}else if(" + _in( ROOT_NAME, it.value ) + "){v" + varCount + "=" + ROOT_NAME + "." + it.value + ";}" );
             }
             if ( it.key === "L_PARENTHESIS" ) {
                 isParamHeader = true;
@@ -98,7 +98,7 @@
             }
 
         } );
-        var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
+        var fn               = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
         return fn( $filter );
     }
 
@@ -123,6 +123,107 @@
         return str.replace( /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&" );
     }
 
+    function checkExpression( SELF, str ) {
+        var expressions = getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter );
+        if ( str.match( expressions ) ) {
+            return str.replace( expressions, function ( match, $1 ) {
+                return Fancy.undefined( $1 ) ? "" : $1;
+            } );
+        }
+
+    }
+
+
+    function getAllElements( element ) {
+        var list = $( element );
+
+        function iterate( el ) {
+            if ( el.length ) {
+                var items = el.contents();
+                list      = list.add( items );
+                items.each( function () {
+                    iterate( $( this ) );
+                } );
+            }
+        }
+
+        iterate( element );
+
+        return list
+
+    }
+
+    function applyDirectives( SELF, element ) {
+
+        var list = getAllElements( element );
+        list.each( function () {
+            var el = this;
+            if ( this.attributes && this.attributes ) {
+
+                $A( this.attributes ).forEach( function ( attr ) {
+                    var expression = checkExpression( SELF, attr.nodeValue );
+                    console.log( expression, attr.nodeValue );
+                    if ( expression ) {
+                        expression     = SELF.eval( expression );
+                        attr.nodeValue = Fancy.undefined( expression ) ? "" : expression;
+                    }
+                } );
+            }
+        } );
+        SELF.$directives.forEach( function ( directive ) {
+            directive.elements = directive.elements || [];
+            var elements       = $( [] );
+            if ( ~directive.restrict.indexOf( "A" ) ) {
+                elements = elements.add( element.find( "[" + directive.name + "]" ) );
+            }
+            if ( ~directive.restrict.indexOf( "E" ) ) {
+                if ( directive.scope && directive.name in directive.scope ) {
+                    throw "ERROR: Multiple Directive";
+                }
+                elements = elements.add( element.find( directive.name ) );
+            }
+            if ( ~directive.restrict.indexOf( "C" ) ) {
+                elements = elements.add( element.find( "." + directive.name ) );
+            }
+            elements.each( function ( index, $el ) {
+                if ( ~$( directive.elements ).index( $el ) ) {
+                    return;
+                }
+                directive.elements.push( $el );
+                var scope = SELF.$scope;
+                var attrs = {};
+                $A( $el.attributes ).forEach( function ( attr ) {
+                    attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
+                } );
+                if ( directive.scope ) {
+                    scope = {
+                        $parent: SELF.$scope
+                    };
+                    each( directive.scope, function ( prop, o ) {
+                        var attr = attrs[ ( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop ) ];
+                        switch ( this[ 0 ] ) {
+                            case "&":
+                                scope[ prop ] = function ( options ) {
+                                    var fn  = SELF.parse( attr ),
+                                        ret = fn( scope.$parent, options );
+                                    SELF.update();
+                                    return ret;
+                                };
+                                break;
+                            case "=":
+                                scope[ prop ] = SELF.eval( attr );
+                                break;
+                            case "@":
+                                scope[ prop ] = attr;
+                                break;
+                        }
+                    } );
+                }
+                directive.link( scope, $( this ), attrs );
+                Fancy( this ).template( { scope: scope } );
+            } )
+        } );
+    }
 
     function getExpression( l, r ) {
         var L = escapeRegExp( l ),
@@ -141,7 +242,7 @@
     }
 
     DIRECTIVES.push( function ( SELF ) {
-        addDirective( SELF, "fancyClick", function () {
+        SELF.directive( "fancyClick", function () {
             return {
                 restrict: "A",
                 scope   : false,
@@ -155,7 +256,7 @@
             };
         } );
     }, function ( SELF ) {
-        addDirective( SELF, "fancyEach", function () {
+        SELF.directive( "fancyEach", function () {
             return {
                 restrict: "A",
                 scope   : true,
@@ -166,21 +267,21 @@
                     $el.before( commentStart );
                     $el.after( commentEnd );
                     $el.remove();
-                    var elements = [];
+                    var elements     = [];
                     SELF.watch( $attr.fancyEach.split( "in" )[ 1 ], reload );
                     function reload() {
                         var items = SELF.parse( $attr.fancyEach.split( "in" )[ 1 ] )( $scope.$parent );
                         $( elements ).remove();
-                        elements = [];
+                        elements  = [];
                         items.forEach( function ( it, index ) {
-                            var tpl = el.clone();
+                            var tpl                                            = el.clone(),
+                                scope                                          = {
+                                    $parent: SELF.$scope,
+                                    $index : index
+                                };
                             elements.push( tpl[ 0 ] );
-                            var scope                                          = {
-                                $parent: SELF.$scope,
-                                $index : index
-                            };
                             scope[ $attr.fancyEach.split( "in" )[ 0 ].trim() ] = it;
-                            Fancy( tpl ).template( $.extend( {}, SELF.settings, { scope: scope } ) );
+                            Fancy( tpl ).template( $.extend( {}, SELF.settings, { scope: scope } ) ).bootstrap();
                             commentEnd.before( tpl );
                         } );
                         //SELF.update();
@@ -192,52 +293,28 @@
         } );
     } );
 
-    function addFilter( SELF, name, filter ) {
-        if ( Fancy.getType( filter ) === "function" ) {
-            SELF.$filter[ name ] = filter;
-        } else {
-            console.error( "You can define " + (name || "a filter") + " only as function!" );
-        }
-    }
-
     function update( SELF, list ) {
         var l = SELF.settings.leftDelimiter,
             r = SELF.settings.rightDelimiter;
         list.forEach( function ( it ) {
-            var expressions   = getExpression( l, r );
-            it.parsed         = it.expression.replace( expressions, function ( match, $1 ) {
-                var evaluated = SELF.eval( $1 );
-                return Fancy.undefined( evaluated ) ? "" : evaluated;
-            } );
-            it.node.nodeValue = it.parsed;
+            var expressions = getExpression( l, r ),
+                parsed      = it.expression.replace( expressions, function ( match, $1 ) {
+                    var evaluated = SELF.eval( $1 );
+                    return Fancy.undefined( evaluated ) ? "" : evaluated;
+                } );
+            if ( !Fancy.equals( it.parsed, parsed ) ) {
+                it.parsed         = parsed;
+                it.node.nodeValue = it.parsed;
+            }
         } );
         return this;
     }
 
 
-    function addDirective( SELF, name, directive ) {
-        var d  = directive.call( SELF );
-        d.name = toDashCase( name );
-        if ( Fancy.getType( d.restrict ) === "string" ) {
-            d.restrict = (function ( list ) {
-                var l = [];
-                list.forEach( function ( item ) {
-                    if ( !~l.indexOf( item.toUpperCase() ) ) {
-                        l.push( item.toUpperCase() );
-                    }
-                } );
-                return l;
-            })( d.restrict.split( "" ) );
-        } else {
-            d.restrict = [ "A" ];
-        }
-        SELF.$directives.push( d );
-    }
-
     function FancyTemplate( $el, settings ) {
-        var SELF      = this;
-        this.element  = $el;
-        this.settings = $.extend( {}, Fancy.settings [ NAME ] );
+        var SELF         = this;
+        this.element     = $el;
+        this.settings    = $.extend( {}, Fancy.settings [ NAME ] );
         each( settings, function ( prop ) {
             if ( prop === "scope" ) {
                 SELF.$scope = this;
@@ -258,23 +335,14 @@
             dir( SELF );
         } );
 
-        each( this.settings.filter, function ( name ) {
-            addFilter( SELF, name, this );
-        } );
-        each( this.settings.directives, function ( name ) {
-            addDirective( SELF, name, this );
-        } );
-
-        this.compile( $el );
-        this.update();
 
         return this;
     }
 
     FancyTemplate.api = FancyTemplate.prototype = {};
-    FancyTemplate.api.version = VERSION;
-    FancyTemplate.api.name    = NAME;
-    FancyTemplate.api.update  = function () {
+    FancyTemplate.api.version   = VERSION;
+    FancyTemplate.api.name      = NAME;
+    FancyTemplate.api.update    = function () {
         var SELF = this;
         update( SELF, SELF.parsed );
         SELF.$listener.forEach( function ( it, i ) {
@@ -287,52 +355,17 @@
         } );
         return this;
     };
-    FancyTemplate.api.parse   = function ( expression ) {
-        return Parse( expression, this.$filter );
+    FancyTemplate.api.parse     = function ( expression ) {
+        return $parse( expression, this.$filter );
     };
-    FancyTemplate.api.eval    = function ( $expression ) {
+    FancyTemplate.api.eval      = function ( $expression ) {
         return this.parse( $expression )( this.$scope );
     };
-    FancyTemplate.api.compile = function ( element ) {
+    FancyTemplate.api.compile   = function ( element ) {
         var SELF = this,
             list = [],
             nodes;
-        SELF.$directives.forEach( function ( directive ) {
-            directive.elements = directive.elements || [];
-            if ( ~directive.restrict.indexOf( "A" ) ) {
-                var elements = element.find( "[" + directive.name + "]" );
-                elements.each( function ( index, $el ) {
-                    if ( ~$( directive.elements ).index( $el ) ) {
-                        return;
-                    }
-                    directive.elements.push( $el );
-                    var scope = SELF.$scope;
-                    if ( directive.scope ) {
-                        scope = {
-                            $parent: SELF.$scope
-                        };
-                        each( directive.scope, function ( prop, o ) {
-                            switch ( this[ 0 ] ) {
-                                case "&":
-                                    scope[ prop ] = function ( options ) {
-                                        var attr = $( $el ).attr( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop );
-                                        var fn   = SELF.parse( attr );
-                                        fn( scope, options );
-                                        SELF.update();
-                                    };
-                                    break;
-                            }
-                        } );
-                    }
-                    var attrs = {};
-                    $A( $el.attributes ).forEach( function ( attr ) {
-                        attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
-                    } );
-                    directive.link( scope, $( this ), attrs );
-                    var template = Fancy( this ).template( { scope: scope } );
-                } )
-            }
-        } );
+        applyDirectives( SELF, element );
         function getTextNodesIn( node ) {
             var textNodes = [], nonWhitespaceMatcher = /\S/;
 
@@ -353,7 +386,7 @@
             return textNodes;
         }
 
-        nodes = getTextNodesIn( element[ 0 ] );
+        nodes       = getTextNodesIn( element[ 0 ] );
         nodes.forEach( function ( it ) {
             if ( it.nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
                 list.push( { expression: it.nodeValue, node: it, nodeType: it.nodeType } );
@@ -364,14 +397,14 @@
         update( SELF, list );
         return this;
     };
-    FancyTemplate.api.destroy = function () {
+    FancyTemplate.api.destroy   = function () {
         this.parsed.forEach( function ( it ) {
             it.node.nodeValue = it.expression;
         } );
         this.element.removeData( NAME );
         return null;
     };
-    FancyTemplate.api.watch   = function ( expression, callback ) {
+    FancyTemplate.api.watch     = function ( expression, callback ) {
         var SELF  = this;
         var value = SELF.parse( expression )( SELF.$scope );
         SELF.$listener.push( {
@@ -379,6 +412,36 @@
             last    : Fancy.copy( value, true ),
             callback: callback
         } );
+    };
+    FancyTemplate.api.bootstrap = function () {
+        return this.compile( this.element ).update();
+    };
+    FancyTemplate.api.directive = function ( name, factory ) {
+        var directive  = factory.call( this );
+        directive.name = toDashCase( name );
+        if ( Fancy.getType( directive.restrict ) === "string" ) {
+            directive.restrict = (function ( list ) {
+                var l = [];
+                list.forEach( function ( item ) {
+                    if ( !~l.indexOf( item.toUpperCase() ) ) {
+                        l.push( item.toUpperCase() );
+                    }
+                } );
+                return l;
+            })( directive.restrict.toUpperCase().split( "" ) );
+        } else {
+            directive.restrict = [ "A", "E", "C" ];
+        }
+        this.$directives.push( directive );
+        return this;
+    };
+    FancyTemplate.api.filter    = function ( name, filter ) {
+        if ( Fancy.getType( filter ) === "function" ) {
+            this.$filter[ name ] = filter;
+        } else {
+            console.error( "You can define " + (name || "a filter") + " only as function!" );
+        }
+        return this;
     };
 
     Fancy.settings [ NAME ] = {
