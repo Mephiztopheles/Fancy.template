@@ -7,18 +7,16 @@
         NAME          = "FancyTemplate",
         VERSION       = "0.1.0",
         templateCache = {},
-        SINGLETAGS    = [ "br", "link", "img", "meta", "param", "input", "source", "track" ],
-        STRIPTAGS     = [ "b", "i", "u" ],
         NODETYPE      = {
             comment: 8,
             text   : 3
         },
         DIRECTIVES    = [],
+        PROVIDER      = [],
         logged        = false;
 
     var SCOPE_NAME = "s",
-        EXTRA_NAME = "l",
-        ROOT_NAME  = SCOPE_NAME + ".$root";
+        EXTRA_NAME = "l";
 
     function isKeyword( value ) {
         switch ( value ) {
@@ -81,7 +79,7 @@
             } else if ( isParamHeader && isParameter && firstPart ) {
                 updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
             } else if ( isParameter && firstPart ) {
-                updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}else if(" + _in( ROOT_NAME, it.value ) + "){v" + varCount + "=" + ROOT_NAME + "." + it.value + ";}" );
+                updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
             }
             if ( it.key === "L_PARENTHESIS" ) {
                 isParamHeader = true;
@@ -98,7 +96,7 @@
             }
 
         } );
-        var fn               = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
+        var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
         return fn( $filter );
     }
 
@@ -151,7 +149,7 @@
     }
 
 
-    function getAllElements( element ) {
+    function getAllElements( element, callback ) {
         var list = $( element );
 
         function iterate( el ) {
@@ -159,23 +157,23 @@
                 var items = el.contents();
                 list      = list.add( items );
                 items.each( function () {
-                    iterate( $( this ) );
+                    callback.call( this );
+                } );
+                items.each( function () {
+                    iterate( $( this ), callback );
                 } );
             }
         }
 
         iterate( element );
-
-        return list
-
     }
 
     function applyDirectives( SELF, element ) {
 
-        var list = getAllElements( element );
-        list.each( function () {
+        getAllElements( element, function () {
             if ( this.attributes && this.attributes ) {
                 $A( this.attributes ).forEach( function ( attr ) {
+
                     var expression = checkExpression( SELF, attr.nodeValue );
                     if ( expression ) {
                         expression     = SELF.eval( expression );
@@ -184,37 +182,25 @@
                 } );
             }
         } );
-        SELF.$directives.forEach( function ( directive ) {
+
+        function call( el, directive ) {
             directive.elements = directive.elements || [];
-            var elements       = $( [] );
-            if ( ~directive.restrict.indexOf( "A" ) ) {
-                elements = elements.add( element.find( "[" + directive.name + "]" ) );
+            if ( ~$( directive.elements ).index( el ) ) {
+                return { bootstrap: function () {} };
             }
-            if ( ~directive.restrict.indexOf( "E" ) ) {
-                if ( directive.scope && directive.name in directive.scope ) {
-                    throw "ERROR: Multiple Directive";
-                }
-                elements = elements.add( element.find( directive.name ) );
-            }
-            if ( ~directive.restrict.indexOf( "C" ) ) {
-                elements = elements.add( element.find( "." + directive.name ) );
-            }
-            elements.each( function ( index, $el ) {
-                if ( ~$( directive.elements ).index( $el ) ) {
-                    return;
-                }
-                directive.elements.push( $el );
-                var scope = SELF.$scope;
-                var attrs = {};
-                $A( $el.attributes ).forEach( function ( attr ) {
-                    attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
-                } );
-                if ( directive.scope ) {
-                    scope = {
-                        $parent: SELF.$scope
-                    };
-                    each( directive.scope, function ( prop, o ) {
-                        var attr = attrs[ ( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop ) ];
+            directive.elements.push( el );
+            var scope = SELF.$scope;
+            var attrs = {};
+            $A( el.attributes ).forEach( function ( attr ) {
+                attrs[ toCamelCase( attr.name ) ] = attr.nodeValue;
+            } );
+            if ( directive.scope ) {
+                scope = {
+                    $parent: SELF.$scope
+                };
+                each( directive.scope, function ( prop, o ) {
+                    var attr = attrs[ ( o.length > 1 ? toDashCase( o.substr( 1 ) ) : prop ) ];
+                    if ( attr ) {
                         switch ( this[ 0 ] ) {
                             case "&":
                                 scope[ prop ] = function ( options ) {
@@ -225,18 +211,51 @@
                                 };
                                 break;
                             case "=":
-                                scope[ prop ] = Fancy.getKey( SELF.$scope, attr );
+                                scope[ prop ] = SELF.eval( attr );
                                 break;
                             case "@":
                                 scope[ prop ] = attr;
                                 break;
                         }
-                    } );
+                    }
+                } );
+            }
+
+            var instance = Fancy( el ).template( { scope: scope } );
+            directive.link.call( instance, scope, $( el ), attrs );
+            SELF.$children.push( instance );
+            each( SELF.$filter, function ( i ) {
+                instance.filter( i, this );
+            } );
+            each( SELF.$directives, function ( i, it ) {
+                instance.directive( it.name, function () {
+                    return it.factory;
+                } );
+            } );
+            each( SELF.$provider, function ( i, it ) {
+                var name = it.name;
+                instance.provider( name, it );
+            } );
+            return instance;
+        }
+
+        SELF.$directives.forEach( function ( directive ) {
+            directive.elements = directive.elements || [];
+            var elements       = $( [] );
+            if ( ~directive.factory.restrict.indexOf( "A" ) ) {
+                elements = elements.add( element.find( "[" + directive.name + "]" ) );
+            }
+            if ( ~directive.factory.restrict.indexOf( "E" ) ) {
+                if ( directive.factory.scope && directive.factory.scope !== true && directive.name in directive.factory.scope ) {
+                    throw "ERROR: Multiple Directive";
                 }
-                var template = Fancy( this ).template( { scope: scope } );
-                SELF.$children.push( template );
-                directive.link.call( template, scope, $( this ), attrs );
-                template.bootstrap();
+                elements = elements.add( element.find( directive.name ) );
+            }
+            if ( ~directive.factory.restrict.indexOf( "C" ) ) {
+                elements = elements.add( element.find( "." + directive.name ) );
+            }
+            elements.each( function () {
+                call( this, directive.factory ).bootstrap();
             } )
         } );
     }
@@ -263,6 +282,7 @@
                 restrict: "A",
                 scope   : false,
                 link    : function ( $scope, $el, $attr ) {
+                    console.log( $scope, $el )
                     $el.on( "click", function ( e ) {
                         var click = SELF.parse( $attr.fancyClick );
                         click( SELF.$scope, { $event: e } );
@@ -298,12 +318,12 @@
                     $el.before( commentStart );
                     $el.after( commentEnd );
                     $el.remove();
-                    var elements        = [];
+                    var elements = [];
                     SELF.watch( rhs, reload );
                     function reload() {
                         var items = SELF.parse( rhs )( $scope.$parent );
                         $( elements ).remove();
-                        elements  = [];
+                        elements = [];
                         items.forEach( function ( it, index ) {
                             var tpl   = el.clone(),
                                 scope = {
@@ -329,9 +349,29 @@
         } );
     } );
 
+    PROVIDER.push( function ( SELF ) {
+        SELF.provider( "$interval", function () {
+            this.$get = function () {
+                function interval( callback, timer ) {
+                    return setInterval( function () {
+                        callback();
+                        SELF.update();
+                    }, timer );
+                }
+
+                interval.cancel = function ( number ) {
+                    return clearInterval( number );
+                };
+                return interval;
+            };
+            return this;
+        } );
+    } );
+
     function update( SELF, list ) {
         var l = SELF.settings.leftDelimiter,
             r = SELF.settings.rightDelimiter;
+
         list.forEach( function ( it ) {
             var expressions = getExpression( l, r ),
                 parsed      = it.expression.replace( expressions, function ( match, $1 ) {
@@ -349,11 +389,29 @@
         return this;
     }
 
+    function getInjection( SELF, factory ) {
+        if ( Fancy.getType( factory ) === "function" ) {
+            return factory.call( SELF );
+        } else if ( Fancy.getType() ) {
+            var injections = [],
+                fn         = function () {};
+            factory.forEach( function ( it, i ) {
+                if ( i !== factory.length - 1 ) {
+                    injections.push( SELF.injector( it ) )
+                } else {
+                    fn = it
+                }
+            } );
+            return fn.apply( SELF, injections );
+        } else {
+            throw "[directive]: You did pass a malformed factory"
+        }
+    }
 
     function FancyTemplate( $el, settings ) {
-        var SELF         = this;
-        this.element     = $el;
-        this.settings    = $.extend( {}, Fancy.settings [ NAME ] );
+        var SELF      = this;
+        this.element  = $el;
+        this.settings = $.extend( {}, Fancy.settings [ NAME ] );
         each( settings, function ( prop ) {
             if ( prop === "scope" ) {
                 SELF.$scope = this;
@@ -361,18 +419,26 @@
                 SELF.settings[ prop ] = this;
             }
         } );
-        this.id          = id++;
-        this.parsed      = [];
-        this.$filter     = {};
-        this.$directives = [];
-        this.$listener   = [];
-        this.$children   = [];
+
+        this.$scope.$apply = function () {
+            return SELF.update();
+        };
+        this.id            = id++;
+        this.parsed        = [];
+        this.$filter       = {};
+        this.$directives   = [];
+        this.$listener     = [];
+        this.$provider     = {};
+        this.$children     = [];
         if ( !logged ) {
             logged = true;
             Fancy.version( this );
         }
         DIRECTIVES.forEach( function ( dir ) {
             dir( SELF );
+        } );
+        PROVIDER.forEach( function ( provider ) {
+            provider( SELF );
         } );
 
 
@@ -431,7 +497,7 @@
             return textNodes;
         }
 
-        nodes       = getTextNodesIn( element[ 0 ] );
+        nodes = getTextNodesIn( element[ 0 ] );
         nodes.forEach( function ( it ) {
             if ( it.nodeValue.match( getExpression( SELF.settings.leftDelimiter, SELF.settings.rightDelimiter ) ) ) {
                 list.push( { expression: it.nodeValue, node: it, nodeType: it.nodeType } );
@@ -468,10 +534,13 @@
         return this.compile( this.element ).update();
     };
     FancyTemplate.api.directive = function ( name, factory ) {
-        var directive  = factory.call( this );
-        directive.name = toDashCase( name );
-        if ( Fancy.getType( directive.restrict ) === "string" ) {
-            directive.restrict = (function ( list ) {
+        var directive = {},
+            SELF      = this;
+
+        directive.factory = getInjection( SELF, factory );
+        directive.name    = toDashCase( name );
+        if ( Fancy.getType( directive.factory.restrict ) === "string" ) {
+            directive.factory.restrict = (function ( list ) {
                 var l = [];
                 list.forEach( function ( item ) {
                     if ( !~l.indexOf( item.toUpperCase() ) ) {
@@ -479,12 +548,15 @@
                     }
                 } );
                 return l;
-            })( directive.restrict.toUpperCase().split( "" ) );
+            })( directive.factory.restrict.toUpperCase().split( "" ) );
         } else {
-            directive.restrict = [ "A", "E", "C" ];
+            directive.factory.restrict = [ "A", "E", "C" ];
         }
         this.$directives.push( directive );
         return this;
+    };
+    FancyTemplate.api.provider  = function ( name, provider ) {
+        this.$provider[ name ] = provider;
     };
     FancyTemplate.api.filter    = function ( name, filter ) {
         if ( Fancy.getType( filter ) === "function" ) {
@@ -493,6 +565,9 @@
             console.error( "You can define " + (name || "a filter") + " only as function!" );
         }
         return this;
+    };
+    FancyTemplate.api.injector  = function ( name ) {
+        return getInjection( this, new this.$provider[ name ]().$get );
     };
 
     Fancy.settings [ NAME ] = {

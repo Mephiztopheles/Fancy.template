@@ -4,10 +4,9 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
-        <script src="../bower_components/angular/angular.js"></script>
         <script src="../bower_components/fancy/fancy.js"></script>
         <script src="../bower_components/fancy-lexer/fancylexer.js"></script>
-        <script src="../fancytemplate.js"></script>
+        <script src="../fancytemplatev2.js"></script>
 
         <script>
             var scope = {
@@ -32,11 +31,11 @@
                 "var"   : "test"
             }, b;
             $( function () {
-                b = new Fancy( "body" ).template( { scope: scope } );
-
-                b.filter( "date", function ( value ) {
-                    return value.toLocaleString();
-                } ).filter( "currency", function ( value, symbol ) {
+                b = new Fancy( "body" ).template();
+                b.config( [ "$compileProvider", function ( $compile ) {
+                    console.log( $compile );
+                } ] );
+                b.filter( "currency", function ( value, symbol ) {
                     return value.toFixed( 2 ) + " " + symbol;
                 } ).directive( "currentTime", [ "$interval", function ( $interval ) {
                     return {
@@ -57,14 +56,6 @@
                     };
                 } ] );
                 b.bootstrap();
-                setTimeout( function () {
-                    b.$scope.test = "Hallo User";
-                    b.update();
-                }, 3000 );
-                /*setInterval( function () {
-                 b.$scope.list.push( b.$scope.list.length + 1 );
-                 b.update();
-                 }, 3000 );*/
             } );
         </script>
     </head>
