@@ -27,7 +27,6 @@
                 message : "Log",
                 "var"   : "test"
             }, b;
-            Fancy.allowTemplateTags( "u" );
             $( function () {
                 b = new Fancy( "body" ).template( { scope: scope } );
 
@@ -42,6 +41,13 @@
                         },
                         link : function ( $scope ) {
                             console.log( $scope );
+
+                            this.watch( "info", function ( v, o ) {
+                                console.log( v, o )
+                            } );
+                            this.watch( function () {
+                                console.log( $scope.info );
+                            } );
                         }
                     };
                 } );
@@ -56,6 +62,13 @@
                     b.update();
                 }, 3000 );*/
             } );
+
+            var sc1 = {v:1}, sc2 = {
+                v:(function(s) {
+                    var v0; if(s && "v" in s) {v0 = s.v}
+                    return v0;
+                })(sc1)
+            };
         </script>
     </head>
     <body>
@@ -86,7 +99,9 @@
 
         <a href="#" fancy-click="push($event)">{{ 'Add index' }}</a>
 
-        <div fancy-each="item in list"><b>{{ $index }}:</b> {{ item }}</div>
+        <div fancy-each="item in list track by $index"><b>{{ $index }}:</b> {{ item }}</div>
+
+        <div fancy-each="(key,value) in list"><b>{{ key }}:</b> {{ value }}</div>
 
         <div id="list"></div>
     </body>

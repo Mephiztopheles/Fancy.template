@@ -102,6 +102,23 @@
         return fn( $filter );
     }
 
+    /**
+     *
+     * @param name
+     * @returns {Function}
+     */
+    function error( name ) {
+        return function ( type, msg ) {
+            var str  = msg,
+                args = $A( arguments );
+            args.shift();
+            args.shift();
+            args.forEach( function ( it, i ) {
+                str = msg.replace( "{" + i + "}", it );
+            } );
+            return new Error( name + "[" + type + "] " + str );
+        };
+    }
 
     function toDashCase( str ) {
         return str.replace( /[A-Z][a-z]/g, function ( match ) {
@@ -208,7 +225,7 @@
                                 };
                                 break;
                             case "=":
-                                scope[ prop ] = SELF.eval( attr );
+                                scope[ prop ] = Fancy.getKey( SELF.$scope, attr );
                                 break;
                             case "@":
                                 scope[ prop ] = attr;
@@ -216,8 +233,10 @@
                         }
                     } );
                 }
-                directive.link( scope, $( this ), attrs );
-                Fancy( this ).template( { scope: scope } );
+                var template = Fancy( this ).template( { scope: scope } );
+                SELF.$children.push( template );
+                directive.link.call( template, scope, $( this ), attrs );
+                template.bootstrap();
             } )
         } );
     }
@@ -253,31 +272,51 @@
             };
         } );
     }, function ( SELF ) {
+        var fancyEachMinErr = error( "FancyEach" );
         SELF.directive( "fancyEach", function () {
             return {
                 restrict: "A",
                 scope   : true,
                 link    : function ( $scope, $el, $attr ) {
-                    var commentStart = $( document.createComment( "fancyEach:start" ) ),
-                        commentEnd   = $( document.createComment( "fancyEach:start" ) ),
+                    var expression   = $attr.fancyEach,
+                        commentStart = $( document.createComment( "fancyEach:start" ) ),
+                        commentEnd   = $( document.createComment( "fancyEach:end" ) ),
                         el           = $el.clone();
+                    var match        = expression.match( /^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+track\s+by\s+([\s\S]+?))?\s*$/ );
+                    if ( !match ) {
+                        throw fancyEachMinErr( 'iexp', "Expected expression in form of '_item_ in _collection_[ track by _id_]' but got %s.", expression );
+                    }
+                    var lhs        = match[ 1 ];
+                    var rhs        = match[ 2 ];
+                    var trackByExp = match[ 3 ];
+                    match          = lhs.match( /^(?:(\s*[\$\w]+)|\(\s*([\$\w]+)\s*,\s*([\$\w]+)\s*\))$/ );
+                    if ( !match ) {
+                        throw fancyEachMinErr( 'iidexp', "'_item_' in '_item_ in _collection_' should be an identifier or '(_key_, _value_)' expression, but got '{0}'.", lhs );
+                    }
+                    var valueIdentifier = match[ 3 ] || match[ 1 ];
+                    var keyIdentifier   = match[ 2 ];
                     $el.before( commentStart );
                     $el.after( commentEnd );
                     $el.remove();
-                    var elements     = [];
-                    SELF.watch( $attr.fancyEach.split( "in" )[ 1 ], reload );
+                    var elements        = [];
+                    SELF.watch( rhs, reload );
                     function reload() {
-                        var items = SELF.parse( $attr.fancyEach.split( "in" )[ 1 ] )( $scope.$parent );
+                        var items = SELF.parse( rhs )( $scope.$parent );
                         $( elements ).remove();
                         elements  = [];
                         items.forEach( function ( it, index ) {
-                            var tpl                                            = el.clone(),
-                                scope                                          = {
-                                    $parent: SELF.$scope,
-                                    $index : index
+                            var tpl   = el.clone(),
+                                scope = {
+                                    $parent: SELF.$scope
                                 };
                             elements.push( tpl[ 0 ] );
-                            scope[ $attr.fancyEach.split( "in" )[ 0 ].trim() ] = it;
+                            if ( keyIdentifier ) {
+                                scope[ keyIdentifier ] = index;
+                            }
+                            scope[ valueIdentifier ] = it;
+                            if ( trackByExp ) {
+                                scope[ trackByExp ] = index;
+                            }
                             Fancy( tpl ).template( $.extend( {}, SELF.settings, { scope: scope } ) ).bootstrap();
                             commentEnd.before( tpl );
                         } );
@@ -304,6 +343,9 @@
                 it.node.nodeValue = it.parsed;
             }
         } );
+        SELF.$children.forEach( function ( it ) {
+            it.update();
+        } );
         return this;
     }
 
@@ -324,6 +366,7 @@
         this.$filter     = {};
         this.$directives = [];
         this.$listener   = [];
+        this.$children   = [];
         if ( !logged ) {
             logged = true;
             Fancy.version( this );
@@ -342,11 +385,16 @@
     FancyTemplate.api.update    = function () {
         var SELF = this;
         update( SELF, SELF.parsed );
-        SELF.$listener.forEach( function ( it, i ) {
-            var value = SELF.parse( it.value )( SELF.$scope );
-            if ( !Fancy.equals( value, it.last ) ) {
-                it.callback.call( SELF, value, it.last );
-                SELF.$listener[ i ].last = Fancy.copy( value, true );
+        SELF.$listener.forEach( function ( it ) {
+            if ( it.hasOwnProperty( "value" ) ) {
+                var value = SELF.parse( it.value )( SELF.$scope );
+                if ( !Fancy.equals( value, it.last ) ) {
+                    it.callback.call( SELF, value, it.last );
+                    it.last = Fancy.copy( value, true );
+                    update( SELF, SELF.parsed );
+                }
+            } else {
+                it.callback.call( SELF, null, null );
                 update( SELF, SELF.parsed );
             }
         } );
@@ -402,13 +450,19 @@
         return null;
     };
     FancyTemplate.api.watch     = function ( expression, callback ) {
-        var SELF  = this;
-        var value = SELF.parse( expression )( SELF.$scope );
-        SELF.$listener.push( {
-            value   : expression,
-            last    : Fancy.copy( value, true ),
-            callback: callback
-        } );
+        var SELF = this;
+        if ( Fancy.getType( expression ) === "function" ) {
+            SELF.$listener.push( {
+                callback: expression
+            } );
+        } else if ( Fancy.getType( expression ) === "string" ) {
+            var value = SELF.parse( expression )( SELF.$scope );
+            SELF.$listener.push( {
+                value   : expression,
+                last    : Fancy.copy( value, true ),
+                callback: callback
+            } );
+        }
     };
     FancyTemplate.api.bootstrap = function () {
         return this.compile( this.element ).update();
@@ -448,29 +502,7 @@
         bindClass     : NAME + "-bindings"
     };
 
-    Fancy.forbidTemplateTags = function () {
-        $A( arguments ).forEach( function ( it ) {
-            var index       = STRIPTAGS.indexOf( it ),
-                singleIndex = SINGLETAGS.indexOf( it );
-            if ( index === -1 && singleIndex === -1 ) {
-                STRIPTAGS.push( it );
-            } else if ( singleIndex !== -1 ) {
-                console.error( "singletags are forbidden by default" );
-            }
-        } )
-    };
-    Fancy.allowTemplateTags  = function () {
-        $A( arguments ).forEach( function ( it ) {
-            var index       = STRIPTAGS.indexOf( it ),
-                singleIndex = SINGLETAGS.indexOf( it );
-            if ( index !== -1 && singleIndex === -1 ) {
-                STRIPTAGS.splice( index, 1 );
-            } else if ( singleIndex !== -1 ) {
-                console.error( "You cannot allow singletags" );
-            }
-        } )
-    };
-    Fancy.loadTemplate       = function ( url ) {
+    Fancy.loadTemplate = function ( url ) {
         var success = function () {},
             error   = function () {};
         if ( templateCache[ url ] ) {
@@ -501,8 +533,8 @@
             error   = not;
         };
     };
-    Fancy.template           = VERSION;
-    Fancy.api.template       = function ( settings ) {
+    Fancy.template     = VERSION;
+    Fancy.api.template = function ( settings ) {
         return this.set( NAME, function ( el ) {
             return new FancyTemplate( el, settings );
         }, true );
