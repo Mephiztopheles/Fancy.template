@@ -31,7 +31,7 @@
                 "var"   : "test"
             }, b;
             $( function () {
-                b = new Fancy( "body" ).template();
+                b = new Fancy( "body" ).template( "", scope );
                 b.config( [ "$compileProvider", function ( $compile ) {
                     console.log( $compile );
                 } ] );

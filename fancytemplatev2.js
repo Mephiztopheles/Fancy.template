@@ -89,6 +89,7 @@
             if ( factory ) {
                 switch ( factory.type ) {
                     case "factory":
+                    case "directive":
                     case "provider":
                         if ( instanceCache[ name ] ) {
                             return instanceCache[ name ];
@@ -178,13 +179,6 @@
             return instance;
         }
 
-        function directive( name, factory ) {
-            setProvider( name, function () {
-                this.$get = factory;
-            }, "directive" );
-            return instance;
-        }
-
         function factory( name, factory ) {
             setProvider( name, function () {
                 this.$get = factory;
@@ -192,67 +186,88 @@
             return instance;
         }
 
-        function filter( name, factory ) {
-            getProvider( "$filter" ).register( name, function () {
-                return factory;
-            } );
-            return instance;
-        }
-
         return {
             getProvider: getProvider,
             get        : getInstance,
-            directive  : directive,
             provider   : provider,
             factory    : factory,
-            filter     : filter,
             invoke     : invoke,
             annotate   : annotate
         }
     }
 
-    function Module( name, el ) {
+    function Module( name, el, scope ) {
         var module = modules[ name ];
         if ( !module ) {
             module = modules[ name ] = {};
-            var $provider    = createInjector( module );
-            module.directive = $provider.directive;
-            module.filter    = $provider.filter;
-            module.factory   = $provider.factory;
-            module.provider  = $provider.provider;
-            module.config    = function ( fn ) {
-                $provider.invoke( fn );
-                return module;
-            };
+            var invokeQueue  = [],
+                runBlocks    = [],
+                configBlocks = [],
+                $provider    = createInjector( module );
+            module.directive = invokeLater( "$compileProvider", "directive" );
+            module.filter    = invokeLater( "$filterProvider", "register" );
+            module.factory   = invokeLater( "$provide", "factory" );
+            module.service   = invokeLater( "$provide", "service" );
+            module.provider  = invokeLater( "$provide", "provider" );
+            module.config    = invokeLater( '$injector', 'invoke', 'push', configBlocks );
             module.bootstrap = function () {
-                $provider.get( "$compile" )( el );
+                runInvokeQueue( invokeQueue );
+                runInvokeQueue( configBlocks );
+                runInvokeQueue( runBlocks );
+                $provider.get( "$compile" )( el )( scope );
                 return module;
             };
-            $provider.provider( "$injector", function () {
-                this.$get = function () {
-                    return { get: $provider.get };
-                }
-            } );
             $provider.provider( "$provide", function () {
                 this.$get = function () {
                     return $provider;
                 }
             } );
-            $provider.provider( "$parse", $ParseProvider );
-            $provider.provider( "$filter", $FilterProvider );
-            $provider.provider( "$compile", $CompileProvider );
+            $provider.provider( "$injector", function () {
+                this.$get = function () {
+                    return { get: $provider.get, invoke: $provider.invoke };
+                }
+            } );
+            $provider.provider( "$parse", $parseProvider );
+            $provider.provider( "$filter", $filterProvider );
+            $provider.provider( "$compile", $compileProvider );
 
-            $provider.filter( "date", function ( value ) {
+            module.filter( "date", function ( value ) {
                 return value.toLocaleString();
             } );
 
+            function runInvokeQueue( queue ) {
+                var i, ii;
+                for ( i = 0, ii = queue.length; i < ii; i++ ) {
+                    var invokeArgs = queue[ i ],
+                        provider   = $provider.get( invokeArgs[ 0 ] );
+                    provider[ invokeArgs[ 1 ] ].apply( provider, invokeArgs[ 2 ] );
+                }
+            }
+
+            /**
+             *
+             * @param provider
+             * @param method
+             * @param insertMethod
+             * @param queue
+             * @returns {Function}
+             */
+            function invokeLater( provider, method, insertMethod, queue ) {
+                if ( !queue ) {
+                    queue = invokeQueue;
+                }
+                return function () {
+                    queue[ insertMethod || 'push' ]( [ provider, method, arguments ] );
+                    return module;
+                };
+            }
         }
         return module;
     }
 
 
-    $FilterProvider.$inject = [ '$provide' ];
-    function $FilterProvider( $provide ) {
+    $filterProvider.$inject = [ '$provide' ];
+    function $filterProvider( $provide ) {
         var suffix = "Filter";
 
         function register( name, factory ) {
@@ -275,9 +290,9 @@
         } ];
     }
 
-    $CompileProvider.$inject = [ "$parse" ];
-    function $CompileProvider( $parse ) {
-        var LEFT = "{{", RIGHT = "}}";
+    $compileProvider.$inject = [ "$parse", "$provide" ];
+    function $compileProvider( $parse, $provide ) {
+        var LEFT = "{{", RIGHT = "}}", Suffix = "Directive";
 
         function getAllElements( element, callback ) {
             var list = $( element );
@@ -318,32 +333,83 @@
             LEFT = value;
         };
 
+        this.directive = function ( name, factory ) {
+            $provide.factory( name + Suffix, [ "$injector", function ( $injector ) {
+                var directive = $injector.invoke( factory );
+                console.log( directive );
+            } ] )
+        };
+
         this.rightDelimiter = function ( value ) {
             RIGHT = value;
         };
 
+        var parsed = [];
+
+        function getTextNodesIn( node ) {
+            var textNodes = [], nonWhitespaceMatcher = /\S/;
+
+            function getTextNodes( node ) {
+                if ( node.nodeType == 3 ) {
+                    if ( nonWhitespaceMatcher.test( node.nodeValue ) ) {
+                        textNodes.push( node );
+                    }
+                } else if ( node.childNodes ) {
+                    for ( var i = 0, len = node.childNodes.length; i < len; ++i ) {
+                        getTextNodes( node.childNodes[ i ] );
+                    }
+                }
+            }
+
+
+            getTextNodes( node );
+            return textNodes;
+        }
+
         this.$get = function () {
             return function ( $html ) {
-                var list = [];
-                getAllElements( $html, function () {
-                    if ( this.attributes ) {
-                        Array.prototype.slice.call( this.attributes ).forEach( function ( attr ) {
+                var list  = [];
+                var nodes = getTextNodesIn( $( $html )[ 0 ] );
 
-                            var expression = checkExpression( attr.nodeValue );
-                            console.log( expression );
-                            if ( expression ) {
-                                expression     = $parse( expression );
-                                attr.nodeValue = Fancy.undefined( expression ) ? "" : expression;
-                            }
-                        } );
+                return function ( $scope ) {
+                    console.log( nodes );
+                    function checkContent( node, list ) {
+                        var expression = checkExpression( node.nodeValue );
+                        if ( expression ) {
+                            list.push( [ node, node.nodeValue ] );
+                        }
                     }
-                } );
 
+                    forEach( nodes, function ( node ) {
+                        checkContent( node, parsed );
+                    } );
+                    getAllElements( $html, function () {
+                        list.push( this );
+                        if ( this.attributes ) {
+                            Array.prototype.slice.call( this.attributes ).forEach( function ( attr ) {
+                                checkContent( attr, parsed );
+                            } );
+                        }
+                    } );
+                    console.log( parsed );
+                    forEach( parsed, function ( it ) {
+                        var expressions = getExpression( LEFT, RIGHT ),
+                            parsed      = it[ 1 ].replace( expressions, function ( match, $1 ) {
+                                var evaluated = $parse( $1.trim() );
+                                console.log( evaluated )
+                                evaluated = evaluated( $scope );
+                                return Fancy.undefined( evaluated ) ? "" : evaluated;
+                            } );
+
+                        console.log( it[ 1 ] );
+                        it[ 0 ].nodeValue = parsed;
+                    } );
+                }
             }
         }
     }
 
-    function $ParseProvider() {
+    function $parseProvider() {
 
 
         function isKeyword( value ) {
@@ -435,13 +501,13 @@
     }
 
 
-    window.F = new Module( "fancy" );
+    window.F = new Module( "fancy", "body", {} );
 
 
     Fancy.template     = "1.0.0";
-    Fancy.api.template = function ( name ) {
+    Fancy.api.template = function ( name, scope ) {
         return this.set( "FancyTemplate", function ( el ) {
-            return new Module( name, el );
+            return new Module( name, el, scope );
         }, true );
     };
 
