@@ -323,7 +323,7 @@
             var expressions = getExpression( LEFT, RIGHT );
             if ( str.match( expressions ) ) {
                 return str.replace( expressions, function ( match, $1 ) {
-                    return Fancy.undefined( $1 ) ? "" : $1;
+                    return $1;
                 } );
             }
 
@@ -336,7 +336,6 @@
         this.directive = function ( name, factory ) {
             $provide.factory( name + Suffix, [ "$injector", function ( $injector ) {
                 var directive = $injector.invoke( factory );
-                console.log( directive );
             } ] )
         };
 
@@ -372,7 +371,6 @@
                 var nodes = getTextNodesIn( $( $html )[ 0 ] );
 
                 return function ( $scope ) {
-                    console.log( nodes );
                     function checkContent( node, list ) {
                         var expression = checkExpression( node.nodeValue );
                         if ( expression ) {
@@ -391,17 +389,14 @@
                             } );
                         }
                     } );
-                    console.log( parsed );
                     forEach( parsed, function ( it ) {
                         var expressions = getExpression( LEFT, RIGHT ),
                             parsed      = it[ 1 ].replace( expressions, function ( match, $1 ) {
                                 var evaluated = $parse( $1.trim() );
-                                console.log( evaluated )
                                 evaluated = evaluated( $scope );
                                 return Fancy.undefined( evaluated ) ? "" : evaluated;
                             } );
 
-                        console.log( it[ 1 ] );
                         it[ 0 ].nodeValue = parsed;
                     } );
                 }
@@ -465,7 +460,7 @@
                         } else {
                             value = lexer[ i - 1 ].value;
                         }
-                        replacement = "$filter['" + lexer[ i + 1 ].value + "'](" + value;
+                        replacement = "$filter('" + lexer[ i + 1 ].value + "')(" + value;
                         fnString    = replaceAt( fnString, appendix, value, replacement );
                         fnString    = replaceAt( fnString, appendix, new RegExp( " *\\| *" + lexer[ i + 1 ].value ), "" );
                         appendix += replacement.length;
@@ -493,7 +488,7 @@
                     }
 
                 } );
-                var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ return undefined; } }" ));
+                var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ console.error(e);return undefined; } }" ));
                 return fn( $filter );
             }
         } ];

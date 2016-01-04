@@ -37,7 +37,8 @@
                 } ] );
                 b.filter( "currency", function ( value, symbol ) {
                     return value.toFixed( 2 ) + " " + symbol;
-                } ).directive( "currentTime", [ "$interval", function ( $interval ) {
+                } ).directive( "currentTime", [ "$interval", "$filter", function ( $interval, $filter ) {
+                    console.log( $filter );
                     return {
                         scope: {
                             info: "="
