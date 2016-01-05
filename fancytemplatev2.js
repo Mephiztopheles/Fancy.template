@@ -36,7 +36,7 @@
     function forEach( object, callback ) {
         for ( var i in object ) {
             if ( object.hasOwnProperty( i ) ) {
-                callback( object[ i ], i );
+                callback( object[ i ], (i.match( /^\d*$/ ) ? parseInt( i ) : i) );
             }
         }
     }
@@ -364,6 +364,271 @@
     }
 
 
+    function AST( lexer, debug ) {
+        var self             = this,
+            filterMarker     = "PIPE",
+            varCount         = 0,
+            isFilterFunction = false,
+            isParamHeader    = false,
+            SCOPE_NAME       = "s",
+            EXTRA_NAME       = "l";
+
+        var filters = (function () {
+            var lastOpen = 0,
+                isFilter = false,
+                filters  = [];
+            forEach( lexer, function ( item, i ) {
+                if ( item.key === "L_PARENTHESIS" ) {
+                    lastOpen = i;
+                    filters.push( { from: lastOpen } );
+                }
+                if ( item.key === "R_PARENTHESIS" ) {
+                    if ( filters[ filters.length - 1 ] ) {
+                        if ( isFilter ) {
+                            filters[ filters.length - 1 ].to = i;
+                        } else {
+                            filters.splice( filters.length - 1, 1 );
+                        }
+                    }
+                }
+                if ( item.key === filterMarker ) {
+                    isFilter = true;
+                    if ( !filters[ filters.length - 1 ] ) {
+                        filters.push( {} );
+                    }
+                    filters[ filters.length - 1 ].from = lastOpen;
+                }
+            } );
+            return filters;
+        })();
+
+        function varName( id, absolute ) {
+            var name = "v";
+            if ( absolute ) {
+                return name + id;
+            }
+            varCount++;
+            return name + ((varCount - 1) + (id || 0));
+        }
+
+        this.variables        = [];
+        this.variablePath     = [];
+        this.declarations     = [];
+        this.body             = [];
+        this.allowPush        = function ( index ) {
+            if ( this.variables.length && lexer[ index ].key === "DOT" ) {
+                return false;
+            }
+            var n = lexer[ index + 1 ],
+                p = lexer[ index - 1 ];
+            return (n ? n.key !== "DOT" : true) && (p ? p.key !== "L_BRACKET" : true);
+        };
+        this.in               = function ( o, v ) {
+            return '(' + o + ' && "' + v + '" in ' + o + ')';
+        };
+        this.isKeyword        = function ( value ) {
+            switch ( value ) {
+                case "true":
+                case "false":
+                    return true;
+            }
+            return false;
+        };
+        this.isParameter      = function ( i ) {
+            var l = lexer[ i ];
+            return l && l.key === "IDENTIFIER" && !this.isKeyword( l.value );
+        };
+        this.isFilter         = function ( i ) {
+            var l = lexer[ i ],
+                p = lexer[ i - 1 ],
+                n = lexer[ i + 1 ];
+            return (l ? l.key === filterMarker : false) && (p ? p.key !== filterMarker : false) && (n ? n.key !== filterMarker : true);
+        };
+        this.isAssign         = function ( i ) {
+            var sep = "EQUALS";
+            return (lexer[ i + 1 ] ? lexer[ i + 1 ].key === sep : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== sep : false);
+        };
+        this.firstPart        = function ( i ) {
+            return lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true;
+        };
+        this.resetPath        = function ( index ) {
+            var l = lexer[ index ];
+
+            switch ( l.key ) {
+                case "IDENTIFIER":
+                case "DOT":
+                    return false;
+            }
+            return true;
+        };
+        this.if               = function ( scope, v ) {
+            return "if ( " + scope + " && \"" + v + "\" in " + scope + " )";
+        };
+        this.declare          = function () {
+            var args = Array.prototype.slice.call( arguments );
+            var k    = args.shift(),
+                v    = args.join( "." );
+
+            return [ "{", k, "=", v + ";", "}" ].join( " " );
+        };
+        this.wrapIdentifier   = function ( index ) {
+            var l            = lexer[ index ], scope;
+            var variablePath = [];
+
+            function wrap( index ) {
+                var l = lexer[ index ], scope;
+                if ( self.isParameter( index ) ) {
+                    var v = varName();
+                    if ( variablePath.length ) {
+                        scope = variablePath[ variablePath.length - 1 ];
+                    } else {
+                        scope = SCOPE_NAME;
+                    }
+                    self.declarations.push(
+                        self.if( scope, l.value ) + self.declare( v, scope, l.value )
+                    );
+                    variablePath.push( v );
+                    self.variables.push( v );
+                    return v;
+                }
+                if ( self.resetPath( index ) ) {
+                    variablePath = [];
+                }
+                return l && l.value;
+            }
+
+            if ( this.isParameter( index ) ) {
+                var v = varName();
+                if ( this.variablePath.length ) {
+                    scope = this.variablePath[ this.variablePath.length - 1 ];
+                } else {
+                    scope = SCOPE_NAME;
+                }
+                if ( !isParamHeader && (lexer[ index + 1 ] ? lexer[ index + 1 ].key !== "L_PARENTHESIS" : true) ) {
+                    this.declarations.push(
+                        this.if( scope, l.value ) + this.declare( v, scope, l.value )
+                    );
+                } else {
+                    var args = [],
+                        i    = index + 2,
+                        n    = lexer[ i ];
+                    while ( n && n.key !== "R_PARENTHESIS" ) {
+                        switch ( n.key ) {
+                            case "DOT":
+                            case "COMMA":
+                                break;
+                            default:
+                                args.push( wrap( i ) );
+                                break;
+                        }
+                        i++;
+                        n = lexer[ i ];
+                    }
+                    this.declarations.push(
+                        this.if( scope, l.value ) + this.declare( v, scope, l.value + "( " + args.join( ", " ) + " )" )
+                    );
+                }
+                if ( this.allowPush( index ) ) {
+                    this.body.push( v );
+                }
+                this.variablePath.push( v );
+                this.variables.push( v );
+                return v;
+            }
+            if ( this.allowPush( index ) ) {
+                this.body.push( l.value );
+            }
+            if ( this.resetPath( index ) ) {
+                this.variablePath = [];
+            }
+            return l && l.value;
+        };
+        this.isFilterFunction = function ( index ) {
+            var i = 0;
+            while ( i < filters.length ) {
+                var f = filters[ i ];
+                if ( (f.to ? index < f.to : true) && (f.from ? index > f.from : true) ) {
+                    return true;
+                }
+                i++;
+            }
+            return false;
+        };
+        this.generate         = function () {
+            var fnString = "\nreturn function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {\n";
+            if ( this.variables.length ) {
+                fnString += "var " + this.variables.join( ", " ) + ";\n";
+            }
+            if ( this.declarations.length ) {
+                fnString += this.declarations.join( "\n" ) + "\n";
+            }
+            fnString += "return " + this.body.join( "" ) + ";\n";
+            return fnString;
+        };
+
+        forEach( lexer, function ( item, index ) {
+            var isFilter       = self.isFilterFunction( index ),
+                isAssign       = self.isAssign( index ),
+                nextFilter     = self.isFilter( index + 1 ),
+                previousFilter = self.isFilter( index - 1 );
+
+
+            if ( item.key === "L_PARENTHESIS" ) {
+                if ( self.isParameter( index - 1 ) ) {
+                    isParamHeader = true;
+                } else {
+                    self.body.push( "(" );
+                }
+                return;
+            }
+            if ( item.key === "R_PARENTHESIS" ) {
+                if ( !isParamHeader ) {
+                    self.body.push( ")" );
+                }
+                isParamHeader = false;
+                return;
+            }
+            if ( isParamHeader ) {
+                return;
+            }
+            if ( isFilterFunction && !isFilter ) {
+                self.body.push( ")" );
+            }
+            isFilterFunction = isFilter;
+            if ( nextFilter ) {
+                self.body.push( "$filter", "(" );
+                return;
+            }
+
+            if ( isFilterFunction ) {
+                if ( previousFilter ) {
+                    self.body.push( '"' + item.value + '"', ")", "(" );
+                    //self.body.push( self.wrapIdentifier( index - 2 ) );
+                    self.wrapIdentifier( index - 2 );
+                    return;
+                }
+                switch ( item.key ) {
+                    case "STRING":
+                    case "NUMBER":
+                    case "IDENTIFIER":
+                        self.wrapIdentifier( index );
+                        break;
+                    case "COLON":
+                        self.body.push( "," );
+                        break;
+                }
+                return
+            }
+            self.wrapIdentifier( index );
+
+        } );
+
+        if ( isFilterFunction ) {
+            this.body.push( ")" );
+        }
+
+    }
+
     /*******************************************************************************************************************
      *
      *      $parseProvider
@@ -375,14 +640,7 @@
      * @returns {$parseProvider}
      */
     function $parseProvider() {
-        function isKeyword( value ) {
-            switch ( value ) {
-                case "true":
-                case "false":
-                    return true;
-            }
-            return false;
-        }
+        var debug = false;
 
         function replaceAt( string, index, regex, character ) {
             return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
@@ -392,121 +650,24 @@
             return '(' + o + ' && "' + v + '" in ' + o + ')';
         }
 
-        var SCOPE_NAME = "s",
-            EXTRA_NAME = "l";
-        this.$get      = [ '$filter', function ( $filter ) {
+        this.debug = function ( state ) {
+            debug = !!state;
+        };
+
+        this.$get = [ '$filter', function ( $filter ) {
             return function $parse( $expression ) {
-                var lexer            = new Fancy.lexer( $expression ),
-                    declaration      = "",
-                    variableChecker  = "",
-                    returnValue      = "return " + $expression.trim(),
-                    varCount         = 0,
-                    isFilterFunction = false,
-                    isParamHeader    = false;
-
-                function varName( id, absolute ) {
-                    var name = "v";
-                    if ( absolute ) {
-                        return name + id;
-                    }
-                    return name + (varCount + (id || 0));
+                if ( debug ) {
+                    console.groupCollapsed( $expression );
                 }
+                var lexer = new Fancy.lexer( $expression ),
+                    ast   = new AST( lexer, debug );
 
-                function _isParameter( key, value ) {
-                    return key === "IDENTIFIER" && !isKeyword( value );
+
+                var fn = (new Function( "$filter", "\"use strict\";" + ast.generate() + "}" ));
+                if ( debug ) {
+                    console.log( fn );
+                    console.groupEnd();
                 }
-
-                function declare( k, v ) {
-                    return "{" + k + "=" + v + ";}";
-                }
-
-                lexer.forEach( function ( it, i ) {
-                    var isParameter = _isParameter( it.key, it.value ),
-                        isFilter    = it.key === "PIPE",
-                        isAssign    = (lexer[ i + 1 ] ? lexer[ i + 1 ].key === "EQUALS" : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== "EQUALS" : false),
-                        firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true),
-                        v           = varName();
-
-                    if ( isFilterFunction ) {
-                        if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
-                            update( v, "if" + _in( EXTRA_NAME, it.value ) + declare( v, EXTRA_NAME + "." + it.value ) + "else" + declare( v, SCOPE_NAME + "." + it.value ), it.value );
-                        } else {
-                            if ( it.key === "COLON" ) {
-                                update( null, "," );
-                            }
-                            else if ( lexer[ i - 1 ].key === "PIPE" ) {
-                                var l = lexer[ i - 2 ];
-
-                                if ( _isParameter( l.key, l.value ) ) {
-                                    l = {
-                                        key     : l.key,
-                                        varCount: l.varCount,
-                                        value   : varName( l.varCount, true )
-                                    };
-                                }
-                                update( null, it.value + "')(" + l.value );
-                            } else {
-                                update( null, it.value );
-                            }
-                        }
-                        if ( !lexer[ i + 1 ] ) {
-                            variableChecker += ") ";
-                        }
-                    } else if ( isFilter ) {
-                        isFilterFunction = true;
-                        update( v, v + " = $filter('" );
-                    } else if ( isParameter && isAssign ) {
-                        update( null, SCOPE_NAME + "." + it.value, it.value );
-                    } else if ( isParamHeader && isParameter && firstPart ) {
-                        update( v, "if" + _in( EXTRA_NAME, it.value ) + declare( v, EXTRA_NAME + "." + it.value ) + "else" + declare( v, SCOPE_NAME + "." + it.value ), it.value );
-                    } else if ( isParameter && firstPart ) {
-                        update( v, "if" + _in( SCOPE_NAME, it.value ) + declare( v, SCOPE_NAME + "." + it.value ), it.value );
-                    } else if ( isParameter && !firstPart ) {
-                        var oV      = varName( -1 ),
-                            replace = null;
-
-                        if ( lexer[ i + 1 ] && lexer[ i + 1 ].key === "L_PARENTHESIS" ) {
-                            replace = it.value;
-                        }
-                        // todo: workaround for functions
-                        update( v, "if" + _in( oV, it.value ) + declare( v, oV + "." + it.value ) );
-                    } else if ( it.key === "L_PARENTHESIS" ) {
-                        isParamHeader = true;
-                    } else if ( it.key === "R_PARENTHESIS" ) {
-                        isParamHeader    = false;
-                        isFilterFunction = false;
-                    } else {
-
-                    }
-
-                    function update( variable, checker, replace ) {
-
-                        if ( variable !== null ) {
-                            if ( declaration.length ) {
-                                declaration += ", ";
-                            }
-                            if ( !declaration.length ) {
-                                declaration = "var ";
-                            }
-                            declaration += variable;
-                            if ( replace ) {
-                                returnValue = returnValue.replace( replace, variable );
-                            } else {
-                                returnValue = "return " + variable;
-                            }
-                        }
-                        if ( checker ) {
-                            variableChecker += checker;
-                        }
-
-                        it.varCount = varCount++;
-                    }
-
-                } );
-
-                //var fn = (new Function( "$filter", "\"use strict\";try{return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {" + fnString + ";}}catch(e){console.error(e)}" ));
-                var fn = (new Function( "$filter", "\"use strict\";\r\nreturn function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {\r\n" + (( declaration ? (declaration + "; \r\n") : "") + variableChecker + "\r\n" + returnValue) + ";\r\n}" ));
-                console.log( $expression, fn );
                 return fn( $filter );
             }
         } ];

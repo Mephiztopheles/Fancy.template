@@ -4,11 +4,14 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
+        <!--<script src="../bower_components/angular/angular.js"></script>-->
         <script src="../bower_components/fancy/fancy.js"></script>
         <script src="../bower_components/fancy-lexer/fancylexer.js"></script>
         <script src="../fancytemplatev2.js"></script>
 
         <script>
+
+
             var scope = {
                 user    : "Markus",
                 date    : new Date(),
@@ -23,17 +26,19 @@
                     e.preventDefault();
                     scope.list.push( scope.list.length + 1 );
                 },
+                message : function ( str ) {
+                    alert( str );
+                },
                 alert   : function ( msg ) {
                     alert( msg )
                 },
                 list    : [ 1 ],
-                message : "Log",
                 "var"   : "test"
             }, b;
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
-                b.config( [ "$compileProvider", function ( $compile ) {
-                    console.log( $compile );
+                b.config( [ "$compileProvider", "$parseProvider", function ( $compile, $parse ) {
+                    $parse.debug( false );
                 } ] );
                 b.filter( "currency", [ function () {
                     return function ( value, symbol ) {
@@ -65,6 +70,9 @@
         </script>
     </head>
     <body>
+
+        <!--<div ng-app="">{{ (12).toString() }} {{ 1452023004431|date }}</div>-->
+
         <small>{{ "Hallo " + user }}</small>
         <div>
             <span>
@@ -80,7 +88,8 @@
         <br>{{ num === 10 }}
         <br>{{ var }}
         <br>{{ 121212|currency:"€" }}
-        <br>{{ getValue() }}
+        <br>{{ getValue("hallo") }}
+        <br>{{ log(num, "hallo") }}
         <br>{{ list.toString() }}
         <div id="test">
             <div id="test-child"></div>
@@ -93,7 +102,7 @@
 
         </current-time>
 
-        <div fancy-click="log($event,list)">{{ message }}</div>
+        <div fancy-click="log($event,list)">{{ "log" }}</div>
 
         <a href="#" fancy-click="push($event)">{{ 'Add index' }}</a>
 
