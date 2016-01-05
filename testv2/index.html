@@ -35,9 +35,13 @@
                 b.config( [ "$compileProvider", function ( $compile ) {
                     console.log( $compile );
                 } ] );
-                b.filter( "currency", function ( value, symbol ) {
-                    return value.toFixed( 2 ) + " " + symbol;
-                } ).directive( "currentTime", [ "$interval", "$filter", function ( $interval, $filter ) {
+                b.filter( "currency", [ "test", function ( test ) {
+                    console.log( test );
+                    return function ( value, symbol ) {
+                        console.log( test );
+                        return value.toFixed( 2 ) + " " + symbol;
+                    };
+                } ] ).directive( "currentTime", [ "$interval", "$filter", function ( $interval, $filter ) {
                     console.log( $filter );
                     return {
                         scope: {
@@ -56,6 +60,7 @@
                         }
                     };
                 } ] );
+
                 b.bootstrap();
             } );
         </script>

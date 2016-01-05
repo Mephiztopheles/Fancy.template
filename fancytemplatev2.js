@@ -1,18 +1,38 @@
 (function () {
     var modules = {};
 
+    /**
+     *
+     * @param value
+     * @returns {boolean}
+     */
     function isArray( value ) {
         return Fancy.getType( value ) === "array";
     }
 
+    /**
+     *
+     * @param value
+     * @returns {boolean}
+     */
     function isFunction( value ) {
         return Fancy.getType( value ) === "function";
     }
 
+    /**
+     *
+     * @param value
+     * @returns {boolean}
+     */
     function isObject( value ) {
         return Fancy.getType( value ) === "object";
     }
 
+    /**
+     *
+     * @param object
+     * @param callback
+     */
     function forEach( object, callback ) {
         for ( var i in object ) {
             if ( object.hasOwnProperty( i ) ) {
@@ -21,41 +41,15 @@
         }
     }
 
+    /**
+     *
+     * @param {String} str
+     * @returns {string|XML|void}
+     */
     function escapeRegExp( str ) {
         return str.replace( /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&" );
     }
 
-
-    function annotate( fn ) {
-        var FN_ARGS        = /^[^\(]*\(\s*([^\)]*)\)/m;
-        var FN_ARG_SPLIT   = /,/;
-        var FN_ARG         = /^\s*(_?)(\S+?)\1\s*$/;
-        var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
-        var $inject,
-            fnText,
-            argDecl,
-            last;
-        if ( isFunction( fn ) ) {
-            if ( !($inject = fn.$inject) ) {
-                $inject = [];
-                if ( fn.length ) {
-                    fnText  = fn.toString().replace( STRIP_COMMENTS, '' );
-                    argDecl = fnText.match( FN_ARGS );
-                    forEach( argDecl[ 1 ].split( FN_ARG_SPLIT ), function ( arg ) {
-                        arg.replace( FN_ARG, function ( all, underscore, name ) {
-                            $inject.push( name );
-                        } );
-                    } );
-                }
-                fn.$inject = $inject;
-            }
-        }
-        else if ( isArray( fn ) ) {
-            last    = fn.length - 1;
-            $inject = fn.slice( 0, last );
-        }
-        return $inject;
-    }
 
     /**
      *
@@ -75,43 +69,100 @@
 
     /**
      *
-     * @returns {{getProvider: getProvider, get: getInstance, provider: provider, factory: factory, invoke: invoke}}
+     * @param instance
+     * @returns {{getProvider: getProvider, get: get, provider: provider, factory: factory, invoke: invoke, annotate: annotate}}
      */
     function createInjector( instance ) {
-        var cache         = {},
-            instanceCache = {};
+        var providerSuffix = "Provider",
+            providerCache  = {},
+            instanceCache  = {};
 
-        function getInstance( name ) {
-            var factory = cache[ name ];
-            if ( name.match( /Provider$/ ) ) {
-                return cache[ name.replace( /Provider$/, "" ) ].factory;
-            }
+        /**
+         *
+         * @param name
+         * @returns {Object|*|factory|Function}
+         */
+        function getProvider( name ) {
+            var factory = providerCache[ name ];
             if ( factory ) {
-                switch ( factory.type ) {
-                    case "factory":
-                    case "directive":
-                    case "provider":
-                        if ( instanceCache[ name ] ) {
-                            return instanceCache[ name ];
-                        } else {
-                            return instanceCache[ name ] = invoke( factory.factory.$get );
-                        }
-                        break;
-                    default:
-                        return factory.factory.$get;
+                return factory.factory;
+            }
+        }
 
+        /**
+         *
+         * @param name
+         * @returns {*}
+         */
+        function getInstance( name ) {
+            var factory = providerCache[ name + providerSuffix ];
+            if ( !factory ) {
+                throw minError( 'pget', "Did not find '{0}'.", name );
+            }
+            if ( factory.type === "service" ) {
+                return invoke( factory.factory.$get );
+            }
+            if ( instanceCache[ name ] ) {
+                return instanceCache[ name ];
+            } else {
+                return instanceCache[ name ] = invoke( factory.factory.$get );
+            }
+        }
+
+        /**
+         *
+         * @param name
+         * @returns {*}
+         */
+        function get( name ) {
+            if ( name.match( new RegExp( providerSuffix + "$" ) ) ) {
+                return getProvider( name );
+            } else {
+                return getInstance( name );
+            }
+        }
+
+        /**
+         *
+         * @param fn
+         * @returns {*}
+         */
+        function annotate( fn ) {
+            var FN_ARGS        = /^[^\(]*\(\s*([^\)]*)\)/m;
+            var FN_ARG_SPLIT   = /,/;
+            var FN_ARG         = /^\s*(_?)(\S+?)\1\s*$/;
+            var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+            var $inject,
+                fnText,
+                argDecl,
+                last;
+            if ( isFunction( fn ) ) {
+                if ( !($inject = fn.$inject) ) {
+                    $inject = [];
+                    if ( fn.length ) {
+                        fnText  = fn.toString().replace( STRIP_COMMENTS, '' );
+                        argDecl = fnText.match( FN_ARGS );
+                        forEach( argDecl[ 1 ].split( FN_ARG_SPLIT ), function ( arg ) {
+                            arg.replace( FN_ARG, function ( all, underscore, name ) {
+                                $inject.push( name );
+                            } );
+                        } );
+                    }
+                    fn.$inject = $inject;
                 }
             }
-        }
-
-        function getProvider( name ) {
-            var factory = cache[ name ];
-            if ( factory ) {
-                return cache[ name ].factory;
+            else if ( isArray( fn ) ) {
+                last    = fn.length - 1;
+                $inject = fn.slice( 0, last );
             }
+            return $inject;
         }
 
-
+        /**
+         *
+         * @param instance
+         * @returns {*}
+         */
         function extractInject( instance ) {
             if ( isFunction( instance ) ) {
                 instance.$inject = instance.$inject || [];
@@ -125,7 +176,13 @@
             }
         }
 
-        function invoke( fn, self, locals ) {
+        /**
+         *
+         * @param fn
+         * @param self
+         * @returns {*}
+         */
+        function invoke( fn, self ) {
             fn          = extractInject( fn );
             var args    = [],
                 $inject = annotate( fn ),
@@ -136,18 +193,30 @@
                 if ( typeof key !== 'string' ) {
                     throw minError( 'itkn', 'Incorrect injection token! Expected service name as string, got {0}', key );
                 }
-                args.push( locals && locals.hasOwnProperty( key ) ? locals[ key ] : getInstance( key ) );
+                args.push( get( key ) );
             }
             return fn.apply( self, args );
         }
 
-        function instantiate( Type, locals, serviceName ) {
+        /**
+         *
+         * @param Type
+         * @returns {Object}
+         */
+        function instantiate( Type ) {
             var instance      = Object.create( (isArray( Type ) ? Type[ Type.length - 1 ] : Type).prototype || null );
-            var returnedValue = invoke( Type, instance, locals, serviceName );
+            var returnedValue = invoke( Type, instance );
 
             return isObject( returnedValue ) || isFunction( returnedValue ) ? returnedValue : instance;
         }
 
+        /**
+         *
+         * @param name
+         * @param factory
+         * @param type
+         * @returns {*}
+         */
         function setProvider( name, factory, type ) {
             if ( isFunction( factory ) || isArray( factory ) ) {
                 factory = instantiate( factory );
@@ -155,16 +224,16 @@
             if ( !factory.$get ) {
                 throw minError( 'pget', "Provider '{0}' must define $get factory method.", name );
             }
-            var provided = cache[ name ];
+            var provided = providerCache[ name + providerSuffix ];
             if ( provided ) {
                 throw minError( "provider", "A {0} with name '{1}' is already defined", Fancy.capitalize( provided.type ), name );
             }
-            cache[ name ] = {
+            providerCache[ name + providerSuffix ] = {
                 name   : name,
                 type   : type,
                 factory: factory
             };
-            return cache[ name ];
+            return providerCache[ name + providerSuffix ];
         }
 
 
@@ -179,6 +248,12 @@
             return instance;
         }
 
+        /**
+         *
+         * @param name
+         * @param factory
+         * @returns {*}
+         */
         function factory( name, factory ) {
             setProvider( name, function () {
                 this.$get = factory;
@@ -186,16 +261,31 @@
             return instance;
         }
 
+        function service( name, factory ) {
+            setProvider( name, function () {
+                this.$get = factory;
+            }, "service" );
+        }
+
         return {
             getProvider: getProvider,
-            get        : getInstance,
+            get        : get,
             provider   : provider,
             factory    : factory,
             invoke     : invoke,
-            annotate   : annotate
+            annotate   : annotate,
+            service    : service
         }
     }
 
+    /**
+     *
+     * @param name
+     * @param el
+     * @param scope
+     * @returns {*}
+     * @constructor
+     */
     function Module( name, el, scope ) {
         var module = modules[ name ];
         if ( !module ) {
@@ -231,8 +321,10 @@
             $provider.provider( "$filter", $filterProvider );
             $provider.provider( "$compile", $compileProvider );
 
-            module.filter( "date", function ( value ) {
-                return value.toLocaleString();
+            module.filter( "date", function () {
+                return function ( value ) {
+                    return value.toLocaleString();
+                };
             } );
 
             function runInvokeQueue( queue ) {
@@ -240,6 +332,7 @@
                 for ( i = 0, ii = queue.length; i < ii; i++ ) {
                     var invokeArgs = queue[ i ],
                         provider   = $provider.get( invokeArgs[ 0 ] );
+                    console.log( provider, invokeArgs );
                     provider[ invokeArgs[ 1 ] ].apply( provider, invokeArgs[ 2 ] );
                 }
             }
@@ -266,31 +359,116 @@
     }
 
 
-    $filterProvider.$inject = [ '$provide' ];
-    function $filterProvider( $provide ) {
-        var suffix = "Filter";
-
-        function register( name, factory ) {
-            if ( isObject( name ) ) {
-                var filters = {};
-                forEach( name, function ( filter, key ) {
-                    filters[ key ] = register( key, filter );
-                } );
-                return filters;
-            } else {
-                return $provide.factory( name + suffix, factory );
+    /*******************************************************************************************************************
+     *
+     *      $parseProvider
+     *
+     ******************************************************************************************************************/
+    $parseProvider.$inject = [];
+    /**
+     *
+     * @returns {$parseProvider}
+     */
+    function $parseProvider() {
+        function isKeyword( value ) {
+            switch ( value ) {
+                case "true":
+                case "false":
+                    return true;
             }
+            return false;
         }
 
-        this.register = register;
-        this.$get     = [ '$injector', function ( $injector ) {
-            return function ( name ) {
-                return $injector.get( name + suffix );
-            };
+        function replaceAt( string, index, regex, character ) {
+            return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
+        }
+
+        function _in( o, v ) {
+            return '(' + o + ' && "' + v + '" in ' + o + ')';
+        }
+
+        var SCOPE_NAME = "s",
+            EXTRA_NAME = "l";
+        this.$get      = [ '$filter', function ( $filter ) {
+            return function $parse( $expression ) {
+                var lexer    = new Fancy.lexer( $expression ),
+                    appendix = 0;
+
+                var varCount         = 0,
+                    fnString         = "return " + $expression.trim(),
+                    isFilterFunction = false,
+                    isParamHeader    = false;
+                lexer.forEach( function ( it, i ) {
+                    var isParameter = it.key === "IDENTIFIER" && !isKeyword( it.value ),
+                        isFilter    = it.key === "PIPE",
+                        isAssign    = (lexer[ i + 1 ] ? lexer[ i + 1 ].key === "EQUALS" : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== "EQUALS" : false),
+                        firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true),
+                        replacement;
+                    if ( isFilterFunction ) {
+                        if ( it.key === "COLON" ) {
+                            fnString = replaceAt( fnString, appendix, ":", "," );
+                            appendix += 1;
+                        } else if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
+                            updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                        }
+                        if ( !lexer[ i + 1 ] ) {
+                            fnString += ")";
+                        }
+                    }
+                    else if ( isFilter ) {
+                        isFilterFunction = true;
+                        var value;
+                        if ( lexer[ i - 1 ].key === "IDENTIFIER" ) {
+                            value = "v" + (varCount - 1);
+                        } else {
+                            value = lexer[ i - 1 ].value;
+                        }
+                        replacement = "$filter('" + lexer[ i + 1 ].value + "')(" + value;
+                        fnString    = replaceAt( fnString, appendix, value, replacement );
+                        fnString    = replaceAt( fnString, appendix, new RegExp( " *\\| *" + lexer[ i + 1 ].value ), "" );
+                        appendix += replacement.length;
+                    } else if ( isParameter && isAssign ) {
+                        replacement = "" + SCOPE_NAME + "." + it.value;
+                        fnString    = replaceAt( fnString, appendix, it.value, replacement );
+                        appendix += replacement.length;
+                    } else if ( isParamHeader && isParameter && firstPart ) {
+                        updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                    } else if ( isParameter && firstPart ) {
+                        updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                    }
+                    if ( it.key === "L_PARENTHESIS" ) {
+                        isParamHeader = true;
+                    }
+                    if ( it.key === "R_PARENTHESIS" ) {
+                        isParamHeader    = false;
+                        isFilterFunction = false;
+                    }
+                    function updateFn( replacement ) {
+                        fnString = replacement + fnString;
+                        appendix += replacement.length;
+                        fnString = replaceAt( fnString, appendix, it.value, "v" + varCount );
+                        varCount++;
+                    }
+
+                } );
+                var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {" + fnString + ";}" ));
+                return fn( $filter );
+            }
         } ];
+        return this;
     }
 
+    /*******************************************************************************************************************
+     *
+     *      $compileProvider
+     *
+     ******************************************************************************************************************/
     $compileProvider.$inject = [ "$parse", "$provide" ];
+    /**
+     *
+     * @param $parse
+     * @param $provide
+     */
     function $compileProvider( $parse, $provide ) {
         var LEFT = "{{", RIGHT = "}}", Suffix = "Directive";
 
@@ -390,114 +568,49 @@
                         }
                     } );
                     forEach( parsed, function ( it ) {
-                        var expressions = getExpression( LEFT, RIGHT ),
-                            parsed      = it[ 1 ].replace( expressions, function ( match, $1 ) {
-                                var evaluated = $parse( $1.trim() );
-                                evaluated = evaluated( $scope );
-                                return Fancy.undefined( evaluated ) ? "" : evaluated;
-                            } );
-
-                        it[ 0 ].nodeValue = parsed;
+                        it[ 0 ].nodeValue = it[ 1 ].replace( getExpression( LEFT, RIGHT ), function ( match, $1 ) {
+                            var evaluated = $parse( $1.trim() );
+                            evaluated     = evaluated( $scope );
+                            return Fancy.undefined( evaluated ) ? "" : evaluated;
+                        } );
                     } );
                 }
             }
         }
     }
 
-    function $parseProvider() {
+    /*******************************************************************************************************************
+     *
+     *      $filterProvider
+     *
+     ******************************************************************************************************************/
+    $filterProvider.$inject = [ "$provide" ];
+    /**
+     *
+     * @param $provide
+     */
+    function $filterProvider( $provide ) {
+        var suffix = "Filter";
 
-
-        function isKeyword( value ) {
-            switch ( value ) {
-                case "true":
-                case "false":
-                    return true;
-            }
-            return false;
-        }
-
-        function replaceAt( string, index, regex, character ) {
-            return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
-        }
-
-        function _in( o, v ) {
-            return '(' + o + ' && "' + v + '" in ' + o + ')';
-        }
-
-        var SCOPE_NAME = "s",
-            EXTRA_NAME = "l";
-        this.$get      = [ '$filter', function ( $filter ) {
-            return function $parse( $expression ) {
-                var lexer    = new Fancy.lexer( $expression ),
-                    appendix = 0;
-
-                var varCount         = 0,
-                    fnString         = "return " + $expression.trim(),
-                    isFilterFunction = false,
-                    isParamHeader    = false;
-                lexer.forEach( function ( it, i ) {
-                    var isParameter = it.key === "IDENTIFIER" && !isKeyword( it.value ),
-                        isFilter    = it.key === "PIPE",
-                        isAssign    = (lexer[ i + 1 ] ? lexer[ i + 1 ].key === "EQUALS" : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== "EQUALS" : false),
-                        firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true),
-                        replacement;
-                    if ( isFilterFunction ) {
-                        if ( it.key === "COLON" ) {
-                            fnString = replaceAt( fnString, appendix, ":", "," );
-                            appendix += 1;
-                        } else if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
-                            updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
-                        }
-                        if ( !lexer[ i + 1 ] ) {
-                            fnString += ")";
-                        }
-                    }
-                    else if ( isFilter ) {
-                        isFilterFunction = true;
-                        var value;
-                        if ( lexer[ i - 1 ].key === "IDENTIFIER" ) {
-                            value = "v" + (varCount - 1);
-                        } else {
-                            value = lexer[ i - 1 ].value;
-                        }
-                        replacement = "$filter('" + lexer[ i + 1 ].value + "')(" + value;
-                        fnString    = replaceAt( fnString, appendix, value, replacement );
-                        fnString    = replaceAt( fnString, appendix, new RegExp( " *\\| *" + lexer[ i + 1 ].value ), "" );
-                        appendix += replacement.length;
-                    } else if ( isParameter && isAssign ) {
-                        replacement = "" + SCOPE_NAME + "." + it.value;
-                        fnString    = replaceAt( fnString, appendix, it.value, replacement );
-                        appendix += replacement.length;
-                    } else if ( isParamHeader && isParameter && firstPart ) {
-                        updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
-                    } else if ( isParameter && firstPart ) {
-                        updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
-                    }
-                    if ( it.key === "L_PARENTHESIS" ) {
-                        isParamHeader = true;
-                    }
-                    if ( it.key === "R_PARENTHESIS" ) {
-                        isParamHeader    = false;
-                        isFilterFunction = false;
-                    }
-                    function updateFn( replacement ) {
-                        fnString = replacement + fnString;
-                        appendix += replacement.length;
-                        fnString = replaceAt( fnString, appendix, it.value, "v" + varCount );
-                        varCount++;
-                    }
-
+        function register( name, factory ) {
+            if ( isObject( name ) ) {
+                var filters = {};
+                forEach( name, function ( filter, key ) {
+                    filters[ key ] = register( key, filter );
                 } );
-                var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {try { " + fnString + "; \r\n } catch( e ){ console.error(e);return undefined; } }" ));
-                return fn( $filter );
+                return filters;
+            } else {
+                return $provide.factory( name + suffix, factory );
             }
+        }
+
+        this.register = register;
+        this.$get     = [ '$injector', function ( $injector ) {
+            return function ( name ) {
+                return $injector.get( name + suffix );
+            };
         } ];
-        return this;
     }
-
-
-    window.F = new Module( "fancy", "body", {} );
-
 
     Fancy.template     = "1.0.0";
     Fancy.api.template = function ( name, scope ) {
