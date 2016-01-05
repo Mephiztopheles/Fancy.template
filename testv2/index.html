@@ -35,10 +35,8 @@
                 b.config( [ "$compileProvider", function ( $compile ) {
                     console.log( $compile );
                 } ] );
-                b.filter( "currency", [ "test", function ( test ) {
-                    console.log( test );
+                b.filter( "currency", [ function () {
                     return function ( value, symbol ) {
-                        console.log( test );
                         return value.toFixed( 2 ) + " " + symbol;
                     };
                 } ] ).directive( "currentTime", [ "$interval", "$filter", function ( $interval, $filter ) {
@@ -63,6 +61,7 @@
 
                 b.bootstrap();
             } );
+
         </script>
     </head>
     <body>

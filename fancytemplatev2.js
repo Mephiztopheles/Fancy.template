@@ -287,6 +287,25 @@
      * @constructor
      */
     function Module( name, el, scope ) {
+
+        /**
+         *
+         * @param provider
+         * @param method
+         * @param insertMethod
+         * @param queue
+         * @returns {Function}
+         */
+        function invokeLater( provider, method, insertMethod, queue ) {
+            if ( !queue ) {
+                queue = invokeQueue;
+            }
+            return function () {
+                queue[ insertMethod || 'push' ]( [ provider, method, arguments ] );
+                return module;
+            };
+        }
+
         var module = modules[ name ];
         if ( !module ) {
             module = modules[ name ] = {};
@@ -323,6 +342,11 @@
 
             module.filter( "date", function () {
                 return function ( value ) {
+
+                    if ( Fancy.getType( value ) !== "date" ) {
+                        return undefined;
+                    }
+
                     return value.toLocaleString();
                 };
             } );
@@ -332,27 +356,8 @@
                 for ( i = 0, ii = queue.length; i < ii; i++ ) {
                     var invokeArgs = queue[ i ],
                         provider   = $provider.get( invokeArgs[ 0 ] );
-                    console.log( provider, invokeArgs );
                     provider[ invokeArgs[ 1 ] ].apply( provider, invokeArgs[ 2 ] );
                 }
-            }
-
-            /**
-             *
-             * @param provider
-             * @param method
-             * @param insertMethod
-             * @param queue
-             * @returns {Function}
-             */
-            function invokeLater( provider, method, insertMethod, queue ) {
-                if ( !queue ) {
-                    queue = invokeQueue;
-                }
-                return function () {
-                    queue[ insertMethod || 'push' ]( [ provider, method, arguments ] );
-                    return module;
-                };
             }
         }
         return module;
@@ -391,67 +396,117 @@
             EXTRA_NAME = "l";
         this.$get      = [ '$filter', function ( $filter ) {
             return function $parse( $expression ) {
-                var lexer    = new Fancy.lexer( $expression ),
-                    appendix = 0;
-
-                var varCount         = 0,
-                    fnString         = "return " + $expression.trim(),
+                var lexer            = new Fancy.lexer( $expression ),
+                    declaration      = "",
+                    variableChecker  = "",
+                    returnValue      = "return " + $expression.trim(),
+                    varCount         = 0,
                     isFilterFunction = false,
                     isParamHeader    = false;
+
+                function varName( id, absolute ) {
+                    var name = "v";
+                    if ( absolute ) {
+                        return name + id;
+                    }
+                    return name + (varCount + (id || 0));
+                }
+
+                function _isParameter( key, value ) {
+                    return key === "IDENTIFIER" && !isKeyword( value );
+                }
+
+                function declare( k, v ) {
+                    return "{" + k + "=" + v + ";}";
+                }
+
                 lexer.forEach( function ( it, i ) {
-                    var isParameter = it.key === "IDENTIFIER" && !isKeyword( it.value ),
+                    var isParameter = _isParameter( it.key, it.value ),
                         isFilter    = it.key === "PIPE",
                         isAssign    = (lexer[ i + 1 ] ? lexer[ i + 1 ].key === "EQUALS" : false) && (lexer[ i + 2 ] ? lexer[ i + 2 ].key !== "EQUALS" : false),
                         firstPart   = (lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true),
-                        replacement;
+                        v           = varName();
+
                     if ( isFilterFunction ) {
-                        if ( it.key === "COLON" ) {
-                            fnString = replaceAt( fnString, appendix, ":", "," );
-                            appendix += 1;
-                        } else if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
-                            updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                        if ( isParameter && firstPart && lexer[ i - 1 ].key !== "PIPE" ) {
+                            update( v, "if" + _in( EXTRA_NAME, it.value ) + declare( v, EXTRA_NAME + "." + it.value ) + "else" + declare( v, SCOPE_NAME + "." + it.value ), it.value );
+                        } else {
+                            if ( it.key === "COLON" ) {
+                                update( null, "," );
+                            }
+                            else if ( lexer[ i - 1 ].key === "PIPE" ) {
+                                var l = lexer[ i - 2 ];
+
+                                if ( _isParameter( l.key, l.value ) ) {
+                                    l = {
+                                        key     : l.key,
+                                        varCount: l.varCount,
+                                        value   : varName( l.varCount, true )
+                                    };
+                                }
+                                update( null, it.value + "')(" + l.value );
+                            } else {
+                                update( null, it.value );
+                            }
                         }
                         if ( !lexer[ i + 1 ] ) {
-                            fnString += ")";
+                            variableChecker += ") ";
                         }
-                    }
-                    else if ( isFilter ) {
+                    } else if ( isFilter ) {
                         isFilterFunction = true;
-                        var value;
-                        if ( lexer[ i - 1 ].key === "IDENTIFIER" ) {
-                            value = "v" + (varCount - 1);
-                        } else {
-                            value = lexer[ i - 1 ].value;
-                        }
-                        replacement = "$filter('" + lexer[ i + 1 ].value + "')(" + value;
-                        fnString    = replaceAt( fnString, appendix, value, replacement );
-                        fnString    = replaceAt( fnString, appendix, new RegExp( " *\\| *" + lexer[ i + 1 ].value ), "" );
-                        appendix += replacement.length;
+                        update( v, v + " = $filter('" );
                     } else if ( isParameter && isAssign ) {
-                        replacement = "" + SCOPE_NAME + "." + it.value;
-                        fnString    = replaceAt( fnString, appendix, it.value, replacement );
-                        appendix += replacement.length;
+                        update( null, SCOPE_NAME + "." + it.value, it.value );
                     } else if ( isParamHeader && isParameter && firstPart ) {
-                        updateFn( "var v" + varCount + ";if" + _in( EXTRA_NAME, it.value ) + "{v" + varCount + "=" + EXTRA_NAME + "." + it.value + ";}else{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
+                        update( v, "if" + _in( EXTRA_NAME, it.value ) + declare( v, EXTRA_NAME + "." + it.value ) + "else" + declare( v, SCOPE_NAME + "." + it.value ), it.value );
                     } else if ( isParameter && firstPart ) {
-                        updateFn( "var v" + varCount + ";if" + _in( SCOPE_NAME, it.value ) + "{v" + varCount + "=" + SCOPE_NAME + "." + it.value + ";}" );
-                    }
-                    if ( it.key === "L_PARENTHESIS" ) {
+                        update( v, "if" + _in( SCOPE_NAME, it.value ) + declare( v, SCOPE_NAME + "." + it.value ), it.value );
+                    } else if ( isParameter && !firstPart ) {
+                        var oV      = varName( -1 ),
+                            replace = null;
+
+                        if ( lexer[ i + 1 ] && lexer[ i + 1 ].key === "L_PARENTHESIS" ) {
+                            replace = it.value;
+                        }
+                        // todo: workaround for functions
+                        update( v, "if" + _in( oV, it.value ) + declare( v, oV + "." + it.value ) );
+                    } else if ( it.key === "L_PARENTHESIS" ) {
                         isParamHeader = true;
-                    }
-                    if ( it.key === "R_PARENTHESIS" ) {
+                    } else if ( it.key === "R_PARENTHESIS" ) {
                         isParamHeader    = false;
                         isFilterFunction = false;
+                    } else {
+
                     }
-                    function updateFn( replacement ) {
-                        fnString = replacement + fnString;
-                        appendix += replacement.length;
-                        fnString = replaceAt( fnString, appendix, it.value, "v" + varCount );
-                        varCount++;
+
+                    function update( variable, checker, replace ) {
+
+                        if ( variable !== null ) {
+                            if ( declaration.length ) {
+                                declaration += ", ";
+                            }
+                            if ( !declaration.length ) {
+                                declaration = "var ";
+                            }
+                            declaration += variable;
+                            if ( replace ) {
+                                returnValue = returnValue.replace( replace, variable );
+                            } else {
+                                returnValue = "return " + variable;
+                            }
+                        }
+                        if ( checker ) {
+                            variableChecker += checker;
+                        }
+
+                        it.varCount = varCount++;
                     }
 
                 } );
-                var fn = (new Function( "$filter", "\"use strict\";return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {" + fnString + ";}" ));
+
+                //var fn = (new Function( "$filter", "\"use strict\";try{return function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {" + fnString + ";}}catch(e){console.error(e)}" ));
+                var fn = (new Function( "$filter", "\"use strict\";\r\nreturn function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {\r\n" + (( declaration ? (declaration + "; \r\n") : "") + variableChecker + "\r\n" + returnValue) + ";\r\n}" ));
+                console.log( $expression, fn );
                 return fn( $filter );
             }
         } ];
