@@ -364,7 +364,7 @@
     }
 
 
-    function AST( lexer, debug ) {
+    function AST( lexer ) {
         var self             = this,
             filterMarker     = "PIPE",
             varCount         = 0,
@@ -642,14 +642,6 @@
     function $parseProvider() {
         var debug = false;
 
-        function replaceAt( string, index, regex, character ) {
-            return string.substr( 0, index ) + string.substr( index ).replace( regex, character );
-        }
-
-        function _in( o, v ) {
-            return '(' + o + ' && "' + v + '" in ' + o + ')';
-        }
-
         this.debug = function ( state ) {
             debug = !!state;
         };
@@ -660,7 +652,7 @@
                     console.groupCollapsed( $expression );
                 }
                 var lexer = new Fancy.lexer( $expression ),
-                    ast   = new AST( lexer, debug );
+                    ast   = new AST( lexer );
 
 
                 var fn = (new Function( "$filter", "\"use strict\";" + ast.generate() + "}" ));
