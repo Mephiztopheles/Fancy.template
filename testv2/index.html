@@ -38,7 +38,7 @@
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
                 b.config( [ "$compileProvider", "$parseProvider", function ( $compile, $parse ) {
-                    $parse.debug( false );
+                    $parse.debug( true );
                 } ] );
                 b.filter( "currency", [ function () {
                     return function ( value, symbol ) {
@@ -73,28 +73,29 @@
 
         <!--<div ng-app="">{{ (12).toString() }} {{ 1452023004431|date }}</div>-->
 
-        <small>{{ "Hallo " + user }}</small>
-        <div>
-            <span>
-                <u>{{ "Test" }} {{ test }}</u>
-            </span>
-        </div>
-        <br>{{ date|date }}
-        <br>{{ o.a }}
-        <br>{{ 3 - 1 }}
-        <br>{{ num + 10 }}
-        <br>{{ "testings" }}
-        <br>{{ true }}
-        <br>{{ num === 10 }}
-        <br>{{ var }}
+        <!--<small>{{ "Hallo " + user }}</small>-->
+        <!--<div>-->
+            <!--<span>-->
+                <!--<u>{{ "Test" }} {{ test }}</u>-->
+            <!--</span>-->
+        <!--</div>-->
+        <!--<br>{{ date|date }}-->
+        <br>{{ (date|date)  + " soooos"}}
+        <!--<br>{{ o.a }}-->
+        <!--<br>{{ 3 - 1 }}-->
+        <!--<br>{{ num + 10 }}-->
+        <!--<br>{{ "testings" }}-->
+        <!--<br>{{ true }}-->
+        <!--<br>{{ num === 10 }}-->
+        <!--<br>{{ var }}-->
         <br>{{ 121212|currency:"€" }}
         <br>{{ getValue("hallo") }}
-        <br>{{ log(num, "hallo") }}
+        <br>{{ log(num, "hallo", getValue("hallo")) }}
         <br>{{ list.toString() }}
         <div id="test">
             <div id="test-child"></div>
         </div>
-        <current-time>
+        <!--<current-time>
 
             {{ time|date }}
 
@@ -110,7 +111,7 @@
 
         <div fancy-each="(key,value) in list"><b>{{ key }}:</b> {{ value }}</div>
 
-        <div id="list"></div>
+        <div id="list"></div>-->
     </body>
 
 </html>

@@ -373,34 +373,56 @@
             SCOPE_NAME       = "s",
             EXTRA_NAME       = "l";
 
-        var filters = (function () {
-            var lastOpen = 0,
-                isFilter = false,
-                filters  = [];
-            forEach( lexer, function ( item, i ) {
-                if ( item.key === "L_PARENTHESIS" ) {
-                    lastOpen = i;
-                    filters.push( { from: lastOpen } );
-                }
-                if ( item.key === "R_PARENTHESIS" ) {
-                    if ( filters[ filters.length - 1 ] ) {
-                        if ( isFilter ) {
-                            filters[ filters.length - 1 ].to = i;
-                        } else {
-                            filters.splice( filters.length - 1, 1 );
+        var parts = [];
+
+        var filters  = (function () {
+                var lastOpen = 0,
+                    isFilter = false,
+                    filters  = [];
+                forEach( lexer, function ( item, i ) {
+                    if ( item.key === "L_PARENTHESIS" ) {
+                        lastOpen = i;
+                        filters.push( { from: lastOpen } );
+                    }
+                    if ( item.key === "R_PARENTHESIS" ) {
+                        if ( filters[ filters.length - 1 ] ) {
+                            if ( isFilter ) {
+                                filters[ filters.length - 1 ].to = i;
+                            } else {
+                                filters.splice( filters.length - 1, 1 );
+                            }
                         }
                     }
-                }
-                if ( item.key === filterMarker ) {
-                    isFilter = true;
-                    if ( !filters[ filters.length - 1 ] ) {
-                        filters.push( {} );
+                    if ( item.key === filterMarker ) {
+                        isFilter = true;
+                        if ( !filters[ filters.length - 1 ] ) {
+                            filters.push( {} );
+                        }
+                        filters[ filters.length - 1 ].from = lastOpen;
                     }
-                    filters[ filters.length - 1 ].from = lastOpen;
-                }
-            } );
-            return filters;
-        })();
+                } );
+                console.log( filters );
+                return filters;
+            })(),
+
+            sections = (function () {
+                var lastOpen = 0,
+                    sections = [];
+                forEach( lexer, function ( item, i ) {
+                    if ( item.key === "L_PARENTHESIS" ) {
+                        lastOpen = i;
+                        sections.push( { from: lastOpen } );
+                    }
+                    if ( item.key === "R_PARENTHESIS" ) {
+                        if ( sections[ sections.length - 1 ] ) {
+                            sections[ sections.length - 1 ].to = i;
+                        }
+                    }
+                } );
+                console.log( sections );
+                return sections;
+            })();
+
 
         function varName( id, absolute ) {
             var name = "v";
@@ -415,6 +437,18 @@
         this.variablePath     = [];
         this.declarations     = [];
         this.body             = [];
+        this.isFunctionStart  = function ( index ) {
+            return this.isParameter( index ) && lexer[ index + 1 ] && lexer[ index + 1 ].key === "L_PARENTHESIS";
+        };
+        this.isFilterStart    = function ( index ) {
+            if ( !lexer[ index ] ) {
+                return false;
+            }
+            var isFilterStart    = this.isParameter( index ) && lexer[ index + 1 ] && lexer[ index + 1 ].key === filterMarker,
+                isFilterFunction = ((lexer[ index ].key === "L_PARENTHESIS" || index === 0) ? isFilterFunction2( index ) : false),
+                filterStarted    = lexer[ index - 1 ] ? lexer[ index - 1 ].key === "L_PARENTHESIS" : false;
+            return filterStarted ? false : (isFilterStart || isFilterFunction);
+        };
         this.allowPush        = function ( index ) {
             if ( this.variables.length && lexer[ index ].key === "DOT" ) {
                 return false;
@@ -450,6 +484,9 @@
         };
         this.firstPart        = function ( i ) {
             return lexer[ i - 1 ] ? lexer[ i - 1 ].key !== "DOT" : true;
+        };
+        this.isFunction       = function ( index ) {
+            return !isParamHeader && (lexer[ index + 1 ] ? lexer[ index + 1 ].key !== "L_PARENTHESIS" : true);
         };
         this.resetPath        = function ( index ) {
             var l = lexer[ index ];
@@ -504,7 +541,7 @@
                 } else {
                     scope = SCOPE_NAME;
                 }
-                if ( !isParamHeader && (lexer[ index + 1 ] ? lexer[ index + 1 ].key !== "L_PARENTHESIS" : true) ) {
+                if ( this.isFunction( index ) ) {
                     this.declarations.push(
                         this.if( scope, l.value ) + this.declare( v, scope, l.value )
                     );
@@ -547,7 +584,7 @@
             var i = 0;
             while ( i < filters.length ) {
                 var f = filters[ i ];
-                if ( (f.to ? index < f.to : true) && (f.from ? index > f.from : true) ) {
+                if ( (f.to ? index < f.to : true) && index > f.from ) {
                     return true;
                 }
                 i++;
@@ -562,10 +599,66 @@
             if ( this.declarations.length ) {
                 fnString += this.declarations.join( "\n" ) + "\n";
             }
-            fnString += "return " + this.body.join( "" ) + ";\n";
+            fnString += "return " + this.body.join( "" ) + ";\n}";
             return fnString;
         };
+        function isFilterFunction2( index ) {
+            var i = 0;
+            while ( i < filters.length ) {
+                var f = filters[ i ];
+                if ( (f.to ? index <= f.to : true) && index >= f.from ) {
+                    return true;
+                }
+                i++;
+            }
+            return false;
+        }
 
+        function isInSection( index ) {
+            var i = 0;
+            while ( i < sections.length ) {
+                var f = sections[ i ];
+                if ( (f.to ? index <= f.to : true) && index >= f.from ) {
+                    return true;
+                }
+                i++;
+            }
+            return false;
+        }
+
+        forEach( lexer, function ( it, i ) {
+            var isFunctionStart = self.isFunctionStart( i ),
+                isFilterStart   = self.isFilterStart( i ),
+                isFilter        = isFilterFunction2( i ),
+                isFunction      = isInSection( i );
+
+            var msg = "filter.key: %o, ";
+            msg += "filter.value: %o, ";
+            msg += "isFunctionStart: %o, ";
+            msg += "isFilterStart: %o, ";
+            msg += "isFilter: %o, ";
+            msg += "isFunction: %o, ";
+
+            if ( isFilterStart ) {
+                parts.push( { type: "filter", expression: it.value } );
+            }
+            else if ( isFunctionStart ) {
+                parts.push( { type: "function", expression: it.value } );
+            }
+            else if ( isFilter || isFunction ) {
+                parts[ parts.length - 1 ].expression += it.value;
+            }
+            else {
+                parts.push( { type: "identifier", expression: it.value } );
+            }
+            console.log( msg, it.key, it.value, isFunctionStart, isFilterStart, isFilter, isFunction )
+        } );
+        console.log( parts );
+        var string = "";
+        forEach( parts, function ( item, index ) {
+            // TODO: loop through parts and convert all identifier
+        } );
+        console.log( string );
         forEach( lexer, function ( item, index ) {
             var isFilter       = self.isFilterFunction( index ),
                 isAssign       = self.isAssign( index ),
@@ -577,13 +670,13 @@
                 if ( self.isParameter( index - 1 ) ) {
                     isParamHeader = true;
                 } else {
-                    self.body.push( "(" );
+                    self.body.push( "( " );
                 }
                 return;
             }
             if ( item.key === "R_PARENTHESIS" ) {
                 if ( !isParamHeader ) {
-                    self.body.push( ")" );
+                    self.body.push( " )" );
                 }
                 isParamHeader = false;
                 return;
@@ -592,18 +685,17 @@
                 return;
             }
             if ( isFilterFunction && !isFilter ) {
-                self.body.push( ")" );
+                self.body.push( " )" );
             }
             isFilterFunction = isFilter;
             if ( nextFilter ) {
-                self.body.push( "$filter", "(" );
+                self.body.push( "$filter", "( " );
                 return;
             }
 
             if ( isFilterFunction ) {
                 if ( previousFilter ) {
-                    self.body.push( '"' + item.value + '"', ")", "(" );
-                    //self.body.push( self.wrapIdentifier( index - 2 ) );
+                    self.body.push( '"' + item.value + '"', " )", "( " );
                     self.wrapIdentifier( index - 2 );
                     return;
                 }
@@ -651,11 +743,12 @@
                 if ( debug ) {
                     console.groupCollapsed( $expression );
                 }
+
                 var lexer = new Fancy.lexer( $expression ),
                     ast   = new AST( lexer );
 
 
-                var fn = (new Function( "$filter", "\"use strict\";" + ast.generate() + "}" ));
+                var fn = (new Function( "$filter", "\"use strict\";" + ast.generate() + "" ));
                 if ( debug ) {
                     console.log( fn );
                     console.groupEnd();
