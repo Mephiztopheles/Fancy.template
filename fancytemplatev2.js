@@ -415,7 +415,6 @@
         };
 
         this.buildIdentifier = function ( item ) {
-            console.log( item.expression );
             if ( this.isKeyword( item.expression ) ) {
                 return item.expression;
             }
@@ -484,12 +483,10 @@
 
             function open() {
                 opened++;
-                //console.log( "%cOPENING%c on %o (%o): %o (%o) now on %o", "color:green", "color:inherit", index, _index, lexer[ _index - 1 ].value, _item.value, opened );
             }
 
             function close() {
                 opened--;
-                //console.log( "%cCLOSING%c on %o (%o): %o (%o) now on %o", "color:red", "color:inherit", index, _index, lexer[ _index - 1 ].value, _item.value, opened );
             }
 
             if ( checkValue() ) {
@@ -520,7 +517,6 @@
                 while ( _item && (opened > 1 ? true : _item.value !== ")") ) {
                     var part = this.compilePart( _item, _index );
                     if ( part ) {
-                        //console.log( "PUSHING PART %o", part,declaration )
                         declaration.arguments.push( part );
                         _index += part.length;
                     } else {

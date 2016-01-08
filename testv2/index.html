@@ -13,27 +13,27 @@
 
 
             var scope = {
-                user    : "Markus",
-                date    : new Date(),
-                num     : 10,
+                user: "Markus",
+                date: new Date(),
+                num: 10,
                 getValue: function () {
                     return "This is my value";
                 },
-                log     : function ( msg ) {
+                log: function ( msg ) {
                     console.log.apply( console, arguments );
                 },
-                push    : function ( e ) {
+                push: function ( e ) {
                     e.preventDefault();
                     scope.list.push( scope.list.length + 1 );
                 },
-                message : function ( str ) {
+                message: function ( str ) {
                     alert( str );
                 },
-                alert   : function ( msg ) {
+                alert: function ( msg ) {
                     alert( msg )
                 },
-                list    : [ 1 ],
-                "var"   : "test"
+                list: [ 1 ],
+                "var": "test"
             }, b;
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
@@ -66,34 +66,6 @@
 
                 b.bootstrap();
             } );
-
-
-            (function () {
-                "use strict";
-                var fn = function ( s, l, a, i ) {
-                    var v0, v1, v2, v3 = l && ('get' in l), v4, v5, v6, v7, v8, v9, v10, v11, v12, v13 = l && ('num' in l);
-                    v2                 = v3 ? l : s;
-                    if ( !(v3) ) {if ( s ) {v1 = s.get;}} else {v1 = l.get;}
-                    if ( v1 != null ) {
-                        v6 = v3 ? l : s;
-                        if ( !(v3) ) {if ( s ) {v5 = s.get;}} else {v5 = l.get;}
-                        if ( v5 != null ) {
-                            v7 = 'test';
-                            v8 = 12;
-                            if ( !(v13) ) {if ( s ) {v12 = s.num;}} else {v12 = l.num;}
-                            if ( v12 != null ) {v11 = v12.pad;} else {v11 = undefined;}
-                            if ( v11 != null ) {
-                                v10 = v12.pad();
-                            } else {v10 = undefined;}
-                            v9 =  v10+ 3;
-                            v4 = v6.get( 'test', 12, v10 + 3 );
-                        } else {v4 = undefined;}
-                        v0 = v2.get( v4 );
-                    } else {v0 = undefined;}
-                    return v0;
-                };
-                return fn;
-            })()
 
         </script>
     </head>
