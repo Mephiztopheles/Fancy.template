@@ -363,6 +363,254 @@
         return module;
     }
 
+    function ASTCompiler( expression ) {
+        var SCOPE_NAME = "s",
+            EXTRA_NAME = "l",
+            varCount   = 0,
+            lexer      = Fancy.lexer( expression );
+
+        var index  = 0,
+            scope  = [],
+            opened = 0,
+            item   = lexer[ index ];
+
+        this.variablePath = [];
+        this.variables    = [];
+        this.declarations = [];
+        this.body         = [];
+
+        this.compilePart = function ( item, index ) {
+            var isFunctionOpening = this.isFunctionOpening( item, index );
+            if ( isFunctionOpening ) {
+                return isFunctionOpening;
+            }
+            if ( item.value === "(" || item.value === ")" ) {
+                return
+            }
+            return {
+                type      : item.key,
+                length    : 1,
+                index     : index,
+                expression: item.value
+            };
+
+        };
+        this.isKeyword   = function ( value ) {
+            switch ( value ) {
+                case "true":
+                case "false":
+                    return true;
+            }
+            return false;
+        };
+        this.if          = function ( scope, value, varName ) {
+            return "if(SCOPE && \"PROPERTY\" in SCOPE) {VAR = SCOPE.PROPERTY}".replace( /SCOPE/gi, scope ).replace( /PROPERTY/gi, value ).replace( /VAR/gi, varName );
+        };
+
+        this.declare = function ( name, fn ) {
+            var v = "v" + varCount++;
+
+            this.variables.push( v );
+            return "if( typeof " + name + " === \"function\") {" + v + " = " + fn + ")";
+        };
+
+        this.buildIdentifier = function ( item ) {
+            console.log( item.expression );
+            if ( this.isKeyword( item.expression ) ) {
+                return item.expression;
+            }
+            var v   = "v" + varCount++;
+            var exp = item.expression,
+                p   = this.variablePath.length ? this.variablePath[ this.variablePath.length - 1 ] : SCOPE_NAME;
+            if ( item.type === "FUNCTION" ) {
+                var name = exp.match( /^[^(]+/ ),
+                    list = name[ 0 ].split( "." );
+                var last;
+                for ( var i in list ) {
+                    if ( list.hasOwnProperty( i ) ) {
+                        last = this.buildIdentifier( { type: "IDENTIFIER", expression: list[ i ] } );
+                        //this.declarations.push( this.c.if( p, list[ i ], last ) );
+                    }
+                }
+                exp = exp.replace( /^[^(]+/, last );
+                v   = "v" + varCount;
+                this.declarations.push( this.declare( last, exp ) );
+            } else {
+                this.declarations.push( this.if( p, exp, v ) );
+            }
+            this.variables.push( v );
+            this.variablePath.push( v );
+            return v;
+        };
+        this.resetPath       = function ( item ) {
+            switch ( item.type ) {
+                case "IDENTIFIER":
+                case "DOT":
+                    if ( this.isKeyword( item.expression ) ) {
+                        this.variablePath = [];
+                        return;
+                    }
+            }
+            this.variablePath = [];
+            return true;
+        };
+
+        this.isFunctionOpening = function ( item, index ) {
+            var _index = index,
+                name   = "",
+                _item  = item;
+            if ( !lexer[ index + 1 ] ) {
+                return false;
+            }
+            function checkValue() {
+                switch ( _item.key ) {
+                    case "IDENTIFIER":
+                    case "DOT":
+                        return false;
+                }
+                return true;
+            }
+
+            function openClose() {
+                if ( _item ) {
+                    if ( _item.value === "(" && lexer[ _index + 1 ] && lexer[ _index + 1 ].value !== ")" ) {
+                        open();
+                    }
+                    else if ( _item.value === ")" && lexer[ _index - 1 ] && lexer[ _index - 1 ].value !== "(" ) {
+                        close();
+                    }
+                }
+            }
+
+            function open() {
+                opened++;
+                //console.log( "%cOPENING%c on %o (%o): %o (%o) now on %o", "color:green", "color:inherit", index, _index, lexer[ _index - 1 ].value, _item.value, opened );
+            }
+
+            function close() {
+                opened--;
+                //console.log( "%cCLOSING%c on %o (%o): %o (%o) now on %o", "color:red", "color:inherit", index, _index, lexer[ _index - 1 ].value, _item.value, opened );
+            }
+
+            if ( checkValue() ) {
+                return false;
+            }
+            while ( _item && _item.value !== "(" ) {
+                if ( checkValue() ) {
+                    return false;
+                }
+                name += _item.value;
+                _index++;
+                _item = lexer[ _index ];
+            }
+            if ( index !== _index ) {
+                openClose();
+                var declaration = {
+                    type      : "FUNCTION",
+                    index     : _index,
+                    length    : _index - index,
+                    arguments : [],
+                    expression: name
+                };
+                if ( lexer[ _index + 1 ] && lexer[ _index + 1 ].value === ")" ) {
+                    return declaration;
+                }
+                _index++;
+                _item = lexer[ _index ];
+                while ( _item && (opened > 1 ? true : _item.value !== ")") ) {
+                    var part = this.compilePart( _item, _index );
+                    if ( part ) {
+                        //console.log( "PUSHING PART %o", part,declaration )
+                        declaration.arguments.push( part );
+                        _index += part.length;
+                    } else {
+                        _index++;
+                    }
+                    openClose();
+                    _item = lexer[ _index ];
+                }
+                declaration.length = _index - index;
+                return declaration;
+            }
+            return false;
+        };
+        this.compile           = function () {
+            console.log( expression );
+
+            while ( index < lexer.length ) {
+                var part = this.compilePart( item, index );
+                if ( part ) {
+                    scope.push( part );
+                    index += part.length;
+                } else {
+                    index++;
+                }
+                item = lexer[ index ];
+            }
+            var self = this;
+
+            function iterateArguments( item, index ) {
+                var arg;
+                switch ( item.type ) {
+                    case "FUNCTION":
+                        var fn = item.expression + "(";
+
+                        forEach( item.arguments, function ( argument, i ) {
+                            fn += iterateArguments( argument, i );
+                        } );
+
+                        fn += ")";
+                        self.resetPath( item.type );
+                        arg = self.buildIdentifier( {
+                            type      : item.type,
+                            expression: fn
+                        } );
+                        break;
+                    case "IDENTIFIER":
+                        self.resetPath( item );
+                        arg = self.buildIdentifier( item );
+                        break;
+                    default:
+                        arg = item.expression;
+                }
+                self.resetPath( item.type );
+                return arg;
+            }
+
+            console.log( scope );
+            forEach( scope, function ( item, index ) {
+                self.body.push( iterateArguments( item, index ) );
+            } );
+
+            return this;
+        };
+
+        this.generate = function () {
+            var fnString = "\nreturn function(" + SCOPE_NAME + "," + EXTRA_NAME + ") {\n";
+            if ( this.variables.length ) {
+                fnString += "var " + this.variables.join( ", " ) + ";\n";
+            }
+            if ( this.declarations.length ) {
+                fnString += this.declarations.join( "\n" ) + "\n";
+            }
+            fnString += "return " + this.body.join( "" ) + ";\n}";
+            return fnString;
+        };
+
+        return this;
+    }
+
+    (function () {
+        var _ast = new ASTCompiler( "list.toString()[12].test()" );
+        _ast.compile();
+        console.log( _ast.generate() );
+    })();
+
+    (function () {
+        var _ast = new ASTCompiler( "a(b(\"test\", 12, num.pad() + 3, pad.num() + 3)) - 12" );
+        _ast.compile();
+        console.log( _ast.generate() );
+    })();
 
     function AST( lexer ) {
         var self             = this,
@@ -401,7 +649,6 @@
                         filters[ filters.length - 1 ].from = lastOpen;
                     }
                 } );
-                console.log( filters );
                 return filters;
             })(),
 
@@ -419,7 +666,6 @@
                         }
                     }
                 } );
-                console.log( sections );
                 return sections;
             })();
 
@@ -656,7 +902,7 @@
         console.log( parts );
         var string = "";
         forEach( parts, function ( item, index ) {
-            // TODO: loop through parts and convert all identifier
+            var lex = Fancy.lexer( item.expression );
         } );
         console.log( string );
         forEach( lexer, function ( item, index ) {

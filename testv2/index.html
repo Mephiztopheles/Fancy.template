@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <title>Fancy Template</title>
         <script src="../bower_components/jquery/dist/jquery.min.js"></script>
-        <!--<script src="../bower_components/angular/angular.js"></script>-->
+        <script src="../bower_components/angular/angular.js"></script>
         <script src="../bower_components/fancy/fancy.js"></script>
         <script src="../bower_components/fancy-lexer/fancylexer.js"></script>
         <script src="../fancytemplatev2.js"></script>
@@ -67,20 +67,48 @@
                 b.bootstrap();
             } );
 
+
+            (function () {
+                "use strict";
+                var fn = function ( s, l, a, i ) {
+                    var v0, v1, v2, v3 = l && ('get' in l), v4, v5, v6, v7, v8, v9, v10, v11, v12, v13 = l && ('num' in l);
+                    v2                 = v3 ? l : s;
+                    if ( !(v3) ) {if ( s ) {v1 = s.get;}} else {v1 = l.get;}
+                    if ( v1 != null ) {
+                        v6 = v3 ? l : s;
+                        if ( !(v3) ) {if ( s ) {v5 = s.get;}} else {v5 = l.get;}
+                        if ( v5 != null ) {
+                            v7 = 'test';
+                            v8 = 12;
+                            if ( !(v13) ) {if ( s ) {v12 = s.num;}} else {v12 = l.num;}
+                            if ( v12 != null ) {v11 = v12.pad;} else {v11 = undefined;}
+                            if ( v11 != null ) {
+                                v10 = v12.pad();
+                            } else {v10 = undefined;}
+                            v9 =  v10+ 3;
+                            v4 = v6.get( 'test', 12, v10 + 3 );
+                        } else {v4 = undefined;}
+                        v0 = v2.get( v4 );
+                    } else {v0 = undefined;}
+                    return v0;
+                };
+                return fn;
+            })()
+
         </script>
     </head>
     <body>
 
-        <!--<div ng-app="">{{ (12).toString() }} {{ 1452023004431|date }}</div>-->
+        <!--<div ng-app="">{{ get(get("test", 12, num.pad() + 3)) }}</div>-->
 
         <!--<small>{{ "Hallo " + user }}</small>-->
         <!--<div>-->
-            <!--<span>-->
-                <!--<u>{{ "Test" }} {{ test }}</u>-->
-            <!--</span>-->
+        <!--<span>-->
+        <!--<u>{{ "Test" }} {{ test }}</u>-->
+        <!--</span>-->
         <!--</div>-->
         <!--<br>{{ date|date }}-->
-        <br>{{ (date|date)  + " soooos"}}
+        <br>{{ (date|date) + " soooos"}}
         <!--<br>{{ o.a }}-->
         <!--<br>{{ 3 - 1 }}-->
         <!--<br>{{ num + 10 }}-->
