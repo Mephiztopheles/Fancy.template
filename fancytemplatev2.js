@@ -411,7 +411,7 @@
             var v = "v" + varCount++;
 
             this.variables.push( v );
-            return "if( typeof " + name + " === \"function\") {" + v + " = " + fn + ")";
+            return "if( typeof " + name + " === \"function\") {" + v + " = " + fn + "}";
         };
 
         this.buildIdentifier = function ( item ) {
