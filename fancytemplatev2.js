@@ -374,16 +374,28 @@
             opened = 0,
             item   = lexer[ index ];
 
-        this.variablePath = [];
-        this.variables    = [];
-        this.declarations = [];
-        this.body         = [];
+        this.type          = {
+            "function"         : "FUNCTION",
+            "bracketExpression": "BRACKETEXPRESSION",
+            "identifier"       : "IDENTIFIER"
+        };
+        this.firstFunction = null;
+        this.variablePath  = [];
+        this.variables     = [];
+        this.declarations  = [];
+        this.body          = [];
 
         this.compilePart = function ( item, index ) {
-            var isFunctionOpening = this.isFunctionOpening( item, index );
-            if ( isFunctionOpening ) {
-                return isFunctionOpening;
+            var isFunctionExpression = this.isFunctionExpression( item, index );
+            if ( isFunctionExpression ) {
+                return isFunctionExpression;
             }
+
+            var isBraceExpression = this.isBraceExpression( item, index );
+            if ( isBraceExpression ) {
+                return isBraceExpression;
+            }
+
             if ( item.value === "(" || item.value === ")" ) {
                 return
             }
@@ -406,12 +418,15 @@
         this.if          = function ( scope, value, varName ) {
             return "if(SCOPE && \"PROPERTY\" in SCOPE) {VAR = SCOPE.PROPERTY}".replace( /SCOPE/gi, scope ).replace( /PROPERTY/gi, value ).replace( /VAR/gi, varName );
         };
+        this.notNull     = function ( varName ) {
+            return "if( notNull( " + varName + " ) )";
+        };
 
         this.declare = function ( name, fn ) {
             var v = "v" + varCount++;
 
             this.variables.push( v );
-            return "if( typeof " + name + " === \"function\") {" + v + " = " + fn + "}";
+            return "if( getType( " + name + " ) === \"function\") {" + v + " = " + fn + "}";
         };
 
         this.buildIdentifier = function ( item ) {
@@ -421,19 +436,26 @@
             var v   = "v" + varCount++;
             var exp = item.expression,
                 p   = this.variablePath.length ? this.variablePath[ this.variablePath.length - 1 ] : SCOPE_NAME;
-            if ( item.type === "FUNCTION" ) {
+            if ( item.type === this.type.function ) {
                 var name = exp.match( /^[^(]+/ ),
                     list = name[ 0 ].split( "." );
                 var last;
+
                 for ( var i in list ) {
                     if ( list.hasOwnProperty( i ) ) {
-                        last = this.buildIdentifier( { type: "IDENTIFIER", expression: list[ i ] } );
+                        last = this.buildIdentifier( { type: this.type.identifier, expression: list[ i ] } );
                         //this.declarations.push( this.c.if( p, list[ i ], last ) );
                     }
                 }
                 exp = exp.replace( /^[^(]+/, last );
-                v   = "v" + varCount;
-                this.declarations.push( this.declare( last, exp ) );
+                v   = this.firstFunction || ("v" + varCount);
+                this.functionCount--;
+                if ( this.functionCount ) {
+
+                } else {
+                    this.declarations.push( this.declare( last, exp ) );
+                    this.firstFunction = v;
+                }
             } else {
                 this.declarations.push( this.if( p, exp, v ) );
             }
@@ -447,14 +469,113 @@
                 case "DOT":
                     if ( this.isKeyword( item.expression ) ) {
                         this.variablePath = [];
-                        return;
                     }
+                    return
             }
             this.variablePath = [];
             return true;
         };
 
-        this.isFunctionOpening = function ( item, index ) {
+        this.isFilterExpression   = function ( item, index ) {
+            var _index = index,
+                name   = "",
+                opened = 0,
+                _item  = item;
+            if ( !lexer[ index + 1 ] ) {
+                return false;
+            }
+
+            function openClose() {
+                if ( _item ) {
+                    if ( _item.value === "(" && lexer[ _index + 1 ] && lexer[ _index + 1 ].value !== ")" ) {
+                        open();
+                    }
+                    else if ( _item.value === ")" && lexer[ _index - 1 ] && lexer[ _index - 1 ].value !== "(" ) {
+                        close();
+                    }
+                }
+            }
+
+            function open() {
+                opened++;
+            }
+
+            function close() {
+                opened--;
+            }
+
+            function checkValue() {
+                switch ( _item.key ) {
+                    case "IDENTIFIER":
+                    case "L_BRACKET":
+                    case "NUMBER":
+                    case "STRING":
+                        return false;
+                }
+                return true;
+            }
+
+            if ( checkValue() ) {
+                return false;
+            }
+            while ( _item && _item.value !== ")" ) {
+                if ( checkValue() ) {
+                    return false;
+                }
+                name += _item.value;
+                _index++;
+                _item = lexer[ _index ];
+            }
+
+        };
+        this.isBraceExpression    = function ( item, index ) {
+            var _index = index,
+                name   = "",
+                open   = false,
+                _item  = item;
+            if ( !lexer[ index + 1 ] ) {
+                return false;
+            }
+            function checkValue() {
+                switch ( _item.key ) {
+                    case "IDENTIFIER":
+                    case "L_BRACKET":
+                    case "NUMBER":
+                    case "STRING":
+                        return false;
+                }
+                return true;
+            }
+
+            if ( _item.value !== "[" ) {
+                return
+            }
+
+            while ( _item && _item.value !== "]" ) {
+                if ( checkValue() ) {
+                    return false;
+                }
+                if ( _item.value === "[" ) {
+                    open = true;
+                }
+                if ( open ) {
+                    name += _item.value;
+                }
+                _index++;
+                _item = lexer[ _index ];
+            }
+
+            if ( open ) {
+                return {
+                    type      : this.type.bracketExpression,
+                    index     : _index + 1,
+                    length    : (_index - index) + 1,
+                    expression: name.substr( 1 )
+                };
+            }
+
+        };
+        this.isFunctionExpression = function ( item, index ) {
             var _index = index,
                 name   = "",
                 _item  = item;
@@ -500,10 +621,13 @@
                 _index++;
                 _item = lexer[ _index ];
             }
+            if ( name[ 0 ] === "." ) {
+                name = name.substr( 1 );
+            }
             if ( index !== _index ) {
                 openClose();
                 var declaration = {
-                    type      : "FUNCTION",
+                    type      : this.type.function,
                     index     : _index,
                     length    : _index - index,
                     arguments : [],
@@ -530,13 +654,15 @@
             }
             return false;
         };
-        this.compile           = function () {
-            console.log( expression );
-
+        this.compile              = function () {
+            this.functionCount = 0;
             while ( index < lexer.length ) {
                 var part = this.compilePart( item, index );
                 if ( part ) {
                     scope.push( part );
+                    if ( part.type === this.type.function ) {
+                        this.functionCount++;
+                    }
                     index += part.length;
                 } else {
                     index++;
@@ -545,14 +671,14 @@
             }
             var self = this;
 
-            function iterateArguments( item, index ) {
+            function iterateArguments( item ) {
                 var arg;
                 switch ( item.type ) {
-                    case "FUNCTION":
+                    case self.type.function:
                         var fn = item.expression + "(";
 
-                        forEach( item.arguments, function ( argument, i ) {
-                            fn += iterateArguments( argument, i );
+                        forEach( item.arguments, function ( argument ) {
+                            fn += iterateArguments( argument );
                         } );
 
                         fn += ")";
@@ -561,19 +687,35 @@
                             type      : item.type,
                             expression: fn
                         } );
+                        if ( self.functionCount !== 0 ) {
+                            arg = "";
+                        }
                         break;
-                    case "IDENTIFIER":
+                    case self.type.identifier:
                         self.resetPath( item );
                         arg = self.buildIdentifier( item );
+                        break;
+                    case self.type.bracketExpression:
+                        var v = "v" + (varCount - 1);
+                        self.declarations.push( self.notNull( v ) + "{ " + v + " = " + v + "[" + item.expression + "] } else {" + v + " = undefined}" );
+                        break;
+                    case "DOT":
+                        if ( self.variablePath.length == 1 ) {
+                            return;
+                        }
+                        arg = ".";
                         break;
                     default:
                         arg = item.expression;
                 }
-                self.resetPath( item.type );
+                if ( self.variablePath.length > 1 ) {
+                    arg = "";
+                }
+                self.resetPath( item );
                 return arg;
             }
 
-            console.log( scope );
+
             forEach( scope, function ( item, index ) {
                 self.body.push( iterateArguments( item, index ) );
             } );
@@ -597,9 +739,13 @@
     }
 
     (function () {
-        var _ast = new ASTCompiler( "list.toString()[12].test()" );
+        var _ast = new ASTCompiler( "a.list[0]" );
         _ast.compile();
-        console.log( _ast.generate() );
+        var fn = new Function( "notNull,getType", _ast.generate() )( function ( item ) {
+            var type = Fancy.getType( item );
+            return type !== "null" && type !== "undefined";
+        }, Fancy.getType );
+        console.log( fn, fn( { a: { list: [ 1 ] } } ) );
     })();
 
     (function () {
@@ -988,14 +1134,17 @@
 
                 var lexer = new Fancy.lexer( $expression ),
                     ast   = new AST( lexer );
+                //ast.compile();
 
-
-                var fn = (new Function( "$filter", "\"use strict\";" + ast.generate() + "" ));
+                var fn = (new Function( "$filter, notNull, getType", "\"use strict\";" + ast.generate() + "" ));
                 if ( debug ) {
                     console.log( fn );
                     console.groupEnd();
                 }
-                return fn( $filter );
+                return fn( $filter, function ( item ) {
+                    var type = Fancy.getType( item );
+                    return type !== "null" && type !== "undefined";
+                }, Fancy.getType );
             }
         } ];
         return this;
