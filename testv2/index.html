@@ -13,27 +13,28 @@
 
 
             var scope = {
-                user: "Markus",
-                date: new Date(),
-                num: 10,
+                user    : "Markus",
+                date    : new Date(),
+                num     : 10,
                 getValue: function () {
                     return "This is my value";
                 },
-                log: function ( msg ) {
+                log     : function ( msg ) {
                     console.log.apply( console, arguments );
+                    return true;
                 },
-                push: function ( e ) {
+                push    : function ( e ) {
                     e.preventDefault();
                     scope.list.push( scope.list.length + 1 );
                 },
-                message: function ( str ) {
+                message : function ( str ) {
                     alert( str );
                 },
-                alert: function ( msg ) {
+                alert   : function ( msg ) {
                     alert( msg )
                 },
-                list: [ 1 ],
-                "var": "test"
+                list    : [ 1 ],
+                "var"   : "test"
             }, b;
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
@@ -66,6 +67,9 @@
 
                 b.bootstrap();
             } );
+            function getType( i ) {
+                return Fancy.getType( i );
+            }
 
         </script>
     </head>
