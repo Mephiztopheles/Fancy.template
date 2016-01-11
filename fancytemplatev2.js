@@ -336,6 +336,7 @@
                     return { get: $provider.get, invoke: $provider.invoke };
                 }
             } );
+            $provider.provider( "$debug", $debugProvider );
             $provider.provider( "$parse", $parseProvider );
             $provider.provider( "$filter", $filterProvider );
             $provider.provider( "$compile", $compileProvider );
@@ -834,35 +835,44 @@
      * @returns {$parseProvider}
      */
     function $parseProvider() {
+
+        this.$get = [ "$filter", "$debug", function ( $filter, $debug ) {
+            return function $parse( $expression ) {
+                $debug.groupCollapsed( $expression );
+
+                var ast = new ASTCompiler( $expression );
+                ast.compile();
+
+                var fn = (new Function( "$filter, notNull, getType", "\"use strict\";" + ast.generate() + "" ));
+                $debug.log( fn );
+                $debug.groupEnd();
+                return fn( $filter, function ( item ) {
+                    return !Fancy.undefined( item );
+                }, Fancy.getType );
+            }
+        } ];
+        return this;
+    }
+
+    function $debugProvider() {
         var debug = false;
 
         this.debug = function ( state ) {
             debug = !!state;
         };
 
-        this.$get = [ '$filter', function ( $filter ) {
-            return function $parse( $expression ) {
-                if ( debug ) {
-                    console.groupCollapsed( $expression );
+        this.$get = function () {
+            if ( debug ) {
+                return console
+            } else {
+                var c = {};
+                for ( var i in console ) {
+                    c[ i ] = function () {};
                 }
-
-                /*  var lexer = new Fancy.lexer( $expression ),
-                 ast   = new AST( lexer );
-                 ast.compile();*/
-
-                var ast = new ASTCompiler( $expression );
-                ast.compile();
-
-                var fn = (new Function( "$filter, notNull, getType", "\"use strict\";" + ast.generate() + "" ));
-                if ( debug ) {
-                    console.log( fn );
-                    console.groupEnd();
-                }
-                return fn( $filter, function ( item ) {
-                    return !Fancy.undefined( item );
-                }, Fancy.getType );
+                return c
             }
-        } ];
+        };
+
         return this;
     }
 

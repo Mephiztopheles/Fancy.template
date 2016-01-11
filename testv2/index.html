@@ -38,8 +38,9 @@
             }, b;
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
-                b.config( [ "$compileProvider", "$parseProvider", function ( $compile, $parse ) {
-                    $parse.debug( true );
+                b.config( [ "$compileProvider", "$debugProvider", "$parseProvider", function ( $compile, $debug, $parse ) {
+                    $debug.debug( true );
+                    console.log("fds")
                 } ] );
                 b.filter( "currency", [ function () {
                     return function ( value, symbol ) {
