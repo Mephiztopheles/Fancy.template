@@ -33,14 +33,14 @@
                 alert   : function ( msg ) {
                     alert( msg )
                 },
-                list    : [ 1 ],
+                list    : [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ],
                 "var"   : "test"
             }, b;
             $( function () {
                 b = new Fancy( "body" ).template( "", scope );
                 b.config( [ "$compileProvider", "$debugProvider", "$parseProvider", function ( $compile, $debug, $parse ) {
                     $debug.debug( true );
-                    console.log("fds")
+                    console.log( "fds" )
                 } ] );
                 b.filter( "currency", [ function () {
                     return function ( value, symbol ) {
@@ -85,6 +85,8 @@
         <!--</span>-->
         <!--</div>-->
         <!--<br>{{ date|date }}-->
+        <br>{{ "Hallo" + "Welt" }}
+        <br>{{ (a.b.c)*3 }}
         <br>{{ (date|date) + " soooos"}}
         <!--<br>{{ o.a }}-->
         <!--<br>{{ 3 - 1 }}-->
@@ -97,6 +99,7 @@
         <br>{{ getValue("hallo") }}
         <br>{{ log(num, "hallo", getValue("hallo")) }}
         <br>{{ list.toString() }}
+        <br>{{ list[11].toString()[0] }}
         <div id="test">
             <div id="test-child"></div>
         </div>

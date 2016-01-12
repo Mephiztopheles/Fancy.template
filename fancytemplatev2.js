@@ -382,6 +382,7 @@
 
         this.functionCount = [];
         this.variablePath  = [];
+        this.lastVariable  = "";
         this.variables     = [];
         this.declarations  = [];
         this.body          = [];
@@ -392,6 +393,9 @@
         };
         this.notNull         = function ( varName ) {
             return "if( notNull( " + varName + " ) )";
+        };
+        this.isIn            = function ( currentVarName, call ) {
+            return "if( isIn( " + currentVarName + ", \"" + call + "\" ) )";
         };
         this.buildIdentifier = function ( item ) {
             if ( this.isKeyword( item.expression ) ) {
@@ -407,14 +411,21 @@
         };
 
 
-        this.createVar = function ( add ) {
+        this.currentScope = function () {
+            if ( this.lastVariable ) {
+                return this.lastVariable;
+            } else {
+                return SCOPE_NAME;
+            }
+        };
+        this.createVar    = function ( add ) {
             var v = "v" + (varCount + (add || 0));
             if ( add === undefined ) {
                 varCount++;
             }
             return v;
         };
-        this.isKeyword = function ( value ) {
+        this.isKeyword    = function ( value ) {
             switch ( value ) {
                 case "true":
                 case "false":
@@ -422,17 +433,15 @@
             }
             return false;
         };
-        this.resetPath = function ( item ) {
+        this.resetPath    = function ( item ) {
             switch ( item.type ) {
-                case "IDENTIFIER":
-                case "DOT":
-                    if ( this.isKeyword( item.expression ) ) {
-                        this.variablePath = [];
-                    }
-                    return
+                case "PLUS":
+                case "MINUS":
+                case "MULTIPLY":
+                    this.lastVariable = "";
+                    return true;
             }
-            this.variablePath = [];
-            return true;
+            return false;
         };
 
 
@@ -628,6 +637,8 @@
                     expression: name
                 };
                 if ( lexer[ _index + 1 ] && lexer[ _index + 1 ].value === ")" ) {
+                    declaration.index += 2;
+                    declaration.length += 2;
                     return declaration;
                 }
                 _index++;
@@ -645,6 +656,8 @@
                     openClose();
                     _item = lexer[ _index ];
                 }
+                declaration.arguments.pop();
+                _index++;
                 declaration.length = _index - index;
                 return declaration;
             }
@@ -719,9 +732,6 @@
                 return isExpression;
             }
 
-            if ( item.value === "(" || item.value === ")" ) {
-                return
-            }
             return {
                 type      : item.key,
                 length    : 1,
@@ -733,8 +743,9 @@
         this.compile     = function () {
             var self = this, scope = compile( this, expression );
 
-            function iterateArguments( item, index ) {
-                var arg, newVar;
+            function iterateArguments( item ) {
+                var arg = "", newVar;
+                console.log( item )
                 switch ( item.type ) {
                     case self.type.function:
                         var currentVarName,
@@ -745,7 +756,7 @@
                             currentVarName = self.functionCount[ self.functionCount.length - 1 ];
                             self.body.pop();
                         } else {
-                            currentVarName = SCOPE_NAME;
+                            currentVarName = self.currentScope();
                             self.functionCount.push( currentVarName );
                         }
 
@@ -762,15 +773,20 @@
                         newVar = self.createVar();
                         self.functionCount.push( newVar );
                         self.declarations.push(
-                            "if(" + currentVarName + " && \"" + call + "\" in " + currentVarName + ") {" + newVar + " = " + currentVarName + "." + call + "(" + args.join( "," ) + ")}"
+                            self.isIn( currentVarName, call ) + "{" + newVar + " = " + currentVarName + "." + call + "(" + args.join( "," ) + ")}"
                         );
+                        //if ( !self.variablePath.length ) {
                         self.variables.push( newVar );
-
+                        //}
                         arg = newVar;
+                        if ( self.lastVariable ) {
+                            self.body.pop();
+                        }
+                        self.lastVariable = arg;
                         break;
                     case self.type.identifier:
-                        self.resetPath( item );
-                        arg = self.buildIdentifier( item );
+                        arg               = self.buildIdentifier( item );
+                        self.lastVariable = arg;
                         break;
                     case self.type.bracketExpression:
                         newVar = self.createVar( -1 );
@@ -795,6 +811,8 @@
                         forEach( item.expression.split( "." ), function ( item ) {
                             arg = self.buildIdentifier( { type: "IDENTIFIER", expression: item } );
                         } );
+                        self.variablePath.push( arg );
+                        self.lastVariable = arg;
                         break;
                     default:
                         arg = item.expression;
@@ -803,8 +821,11 @@
                 return arg;
             }
 
-            forEach( scope, function ( item, index ) {
-                self.body.push( iterateArguments( item, index ) );
+            forEach( scope, function ( item ) {
+                var it = iterateArguments( item );
+                if ( it ) {
+                    self.body.push( it );
+                }
             } );
 
             return this;
@@ -843,19 +864,27 @@
                 var ast = new ASTCompiler( $expression );
                 ast.compile();
 
-                var fn = (new Function( "$filter, notNull, getType", "\"use strict\";" + ast.generate() + "" ));
+                var fn = (new Function( "$filter, notNull, getType, isIn", "\"use strict\";" + ast.generate() + "" ));
                 $debug.log( fn );
                 $debug.groupEnd();
                 return fn( $filter, function ( item ) {
                     return !Fancy.undefined( item );
-                }, Fancy.getType );
+                }, Fancy.getType, function ( varName, prop ) {
+                    if ( Fancy.undefined( varName ) ) {
+                        return false;
+                    }
+                    if ( getType( varName ) === "object" || getType( varName ) === "array" ) {
+                        return prop in varName;
+                    }
+                    return varName && varName[ prop ] !== undefined;
+                } );
             }
         } ];
         return this;
     }
 
     function $debugProvider() {
-        var debug = false;
+        var debug = true;
 
         this.debug = function ( state ) {
             debug = !!state;
